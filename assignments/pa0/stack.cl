@@ -3,11 +3,12 @@ class Main inherits IO {
    conversion : A2I <- new A2I;
 
    main() : Object {{
+      out_string(">");
       start();
    }};
    
    start() : Object {
-      let userInput : String <- in_string() in
+      let userInput : String <- in_string() in 
       if userInput="x" then {
          -- Exists recursion gracefully
          0;
@@ -16,7 +17,7 @@ class Main inherits IO {
          -- Handle input accordingly
          checkInput(userInput);
          -- Recurse
-         start();
+         main();
       }
       fi
    };
