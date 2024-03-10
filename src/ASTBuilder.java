@@ -11,7 +11,6 @@ public class ASTBuilder extends CoolParserBaseVisitor<Tree> {
 
     @Override
     public Tree visitProgram(CoolParser.ProgramContext ctx) {
-
         ProgramNode p = new ProgramNode(ctx.getStart().getLine());
         for (CoolParser.CoolClassContext c:ctx.coolClass()) {
             p.add((ClassNode)visitCoolClass(c));
@@ -117,7 +116,7 @@ public class ASTBuilder extends CoolParserBaseVisitor<Tree> {
         if (ctx.PLUS_OPERATOR() != null) { // expr -> e1 + e2
             ExpressionNode[] exprs = getNextExpr(2,ctx);
             return new PlusNode(line, exprs[0], exprs[1]);
-        } else if(ctx.ASSIGN_OPERATOR().size()==1 && ctx.ID().size()==1 && ctx.expr().size()==1 && ctx.LET()==null) { // may be confused with let expr
+        } else if(ctx.ASSIGN_OPERATOR()!=null && ctx.ID().size()==1 && ctx.expr().size()==1 && ctx.LET()==null) { // may be confused with let expr
             ExpressionNode e = getNextExpr(1,ctx)[0];
             Symbol name = StringTable.idtable.addString(ctx.ID(0).getText());
             return new AssignNode(line, name, e);
@@ -160,16 +159,13 @@ public class ASTBuilder extends CoolParserBaseVisitor<Tree> {
             ExpressionNode body = exprs.get(exprs.size()-1);
             return LetAux(exprs,ctx,0);
 
-        } else if(ctx.CASE() != null) { // expr -> CASE expr OF (ID COLON TYPE RIGHTARROW expr)+ ESAC
-//            TODO: FINISH
-            return null;
         } else if(ctx.WHILE() != null) { // expr -> while expr loop expr pool
             ExpressionNode[] exprs = getNextExpr(2,ctx);
             return new LoopNode(line,exprs[0], exprs[1]);
         } else if(ctx.IF() != null) { // if expr then expr else expr fi
             ExpressionNode[] exprs = getNextExpr(3,ctx);
             return new CondNode(line,exprs[0],exprs[1],exprs[2]);
-        } else if(ctx.ID().size() == 1 && ctx.ASSIGN_OPERATOR().size()==1 && ctx.expr().size()==1) {
+        } else if(ctx.ID().size() == 1 && ctx.ASSIGN_OPERATOR()!=null && ctx.expr().size()==1) {
             ExpressionNode expr =  getNextExpr(1,ctx)[0];
             Symbol name = StringTable.idtable.addString(ctx.ID(0).getText());
             return new AssignNode(line,name,expr);
@@ -178,7 +174,6 @@ public class ASTBuilder extends CoolParserBaseVisitor<Tree> {
             return new LoopNode(line,exprs[0],exprs[1]);
         } else if(ctx.PARENT_OPEN()!=null && !ctx.ID().isEmpty()) { // dispatch
             List<ExpressionNode> exprs =  new ArrayList<>(Arrays.asList(getNextExpr(ctx.expr().size(),ctx)));
-
             if(ctx.AT()!=null) {
 //                static dispatch
                 List<ExpressionNode> actuals = exprs.subList(1,exprs.size());
@@ -203,7 +198,25 @@ public class ASTBuilder extends CoolParserBaseVisitor<Tree> {
 
                 return new DispatchNode(line,init,name,exprs);
             }
+        } else if(ctx.CASE()!=null) {
+            List<ExpressionNode> exprs = new ArrayList<>(List.of(getNextExpr(ctx.expr().size(),ctx)));
+            ExpressionNode init = exprs.get(0);
+            exprs.remove(0);
+            List<BranchNode> branches = new ArrayList<>();
+            int index = 0;
+            for(ExpressionNode x : exprs) {
+                branches.add(
+                        new BranchNode(
+                                x.getLineNumber(),
+                                StringTable.idtable.addString(ctx.ID(index).getText()),
+                                StringTable.idtable.addString(ctx.TYPE(index).getText()),
+                                x
+                                )
+                );
+                index++;
+            }
 
+            return new CaseNode(line,init, branches);
         }
 
         System.out.println("ERROR: REACHED THE END FIX IT PAL");

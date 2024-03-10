@@ -1,2 +1,1 @@
-"new line here \
-hello!"
+T
