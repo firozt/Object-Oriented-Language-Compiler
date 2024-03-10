@@ -89,7 +89,7 @@ public class ASTBuilder extends CoolParserBaseVisitor<Tree> {
 
 //        Non recursive expr
         if (ctx.expr().isEmpty()) {
-            if (ctx.ID().size() == 1) {
+            if (ctx.ID().size() == 1 && ctx.PARENT_OPEN() == null) {
 //                expr -> ID
                 Symbol name = StringTable.idtable.addString(ctx.ID(0).getText());
                 return new ObjectNode(line, name);
@@ -111,8 +111,6 @@ public class ASTBuilder extends CoolParserBaseVisitor<Tree> {
 //                expr -> NEW TYPE
                 Symbol type = StringTable.idtable.addString(ctx.TYPE(0).getText());
                 return new NewNode(line, type);
-            } else {
-                return new NoExpressionNode(line);
             }
         }
 //            Recursive rules:
@@ -157,7 +155,6 @@ public class ASTBuilder extends CoolParserBaseVisitor<Tree> {
             return new BlockNode(line, List.of(getNextExpr(ctx.expr().size(),ctx)));
         } else if(ctx.LET() != null) { // expr -> LET ID COLON TYPE (ASSIGN_OPERATOR expr)? (COMMA ID COLON TYPE (ASSIGN_OPERATOR expr)?)* IN expr
 
-
             ExpressionNode[] exprsPrimitive = getNextExpr(ctx.expr().size(),ctx);
             List<ExpressionNode> exprs = new ArrayList<>(Arrays.asList(exprsPrimitive));
             ExpressionNode body = exprs.get(exprs.size()-1);
@@ -179,6 +176,34 @@ public class ASTBuilder extends CoolParserBaseVisitor<Tree> {
         } else if(ctx.WHILE() != null) {
             ExpressionNode[] exprs = getNextExpr(2,ctx);
             return new LoopNode(line,exprs[0],exprs[1]);
+        } else if(ctx.PARENT_OPEN()!=null && !ctx.ID().isEmpty()) { // dispatch
+            List<ExpressionNode> exprs =  new ArrayList<>(Arrays.asList(getNextExpr(ctx.expr().size(),ctx)));
+
+            if(ctx.AT()!=null) {
+//                static dispatch
+                List<ExpressionNode> actuals = exprs.subList(1,exprs.size());
+                Symbol type = StringTable.idtable.addString(ctx.TYPE(0).getText());
+                Symbol name = StringTable.idtable.addString(ctx.ID(0).getText());
+
+                return new StaticDispatchNode(line,exprs.get(0),type,name,actuals);
+            } else {
+                ExpressionNode init;
+                Symbol name;
+//                regular dispatch
+                if (ctx.PERIOD()!=null) {
+                    init = exprs.get(0);
+                    exprs.remove(0);
+//                    name = StringTable.idtable.addString(ctx.ID(0).getText());
+                    name = StringTable.idtable.addString(ctx.ID(0).getText());
+
+                } else {
+                    init = new ObjectNode(line, TreeConstants.self);
+                    name = StringTable.idtable.addString(ctx.ID(0).getText());
+                }
+
+                return new DispatchNode(line,init,name,exprs);
+            }
+
         }
 
         System.out.println("ERROR: REACHED THE END FIX IT PAL");
@@ -221,7 +246,9 @@ public class ASTBuilder extends CoolParserBaseVisitor<Tree> {
         return new LetNode(line, ID, type, init, LetAux(exprs, ctx, index));
     }
 
+
 }
 
 // 51 + 44 passed (out of 134)
 // 51 + 51 (down 11 test cases)
+// 57 + 51 (out of 134

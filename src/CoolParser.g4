@@ -28,19 +28,20 @@ formal
 expr
     : ID ASSIGN_OPERATOR expr
 //    | ID ID ID ID ID // TODO
-    | expr (TYPE)? PERIOD ID PARENT_OPEN (expr (COMMA expr)*)? PARENT_CLOSE
+    | expr (AT TYPE)? PERIOD ID PARENT_OPEN (expr (COMMA expr)*)? PARENT_CLOSE
     | ID PARENT_OPEN (expr (COMMA expr)*)? PARENT_CLOSE
     | IF expr THEN expr ELSE expr FI
     | WHILE expr LOOP expr POOL
     | CURLY_OPEN (expr SEMICOLON)* CURLY_CLOSE
     | LET ID COLON TYPE (ASSIGN_OPERATOR expr)? (COMMA ID COLON TYPE (ASSIGN_OPERATOR expr)?)* IN expr // TODO
+//    | LET (initVar | nonInitVar) (COMMA (initVar | nonInitVar))* IN expr
     | CASE expr OF (ID COLON TYPE RIGHTARROW expr)+ ESAC
     | NEW TYPE
     | ISVOID expr
-    | expr PLUS_OPERATOR expr
-    | expr MINUS_OPERATOR expr
-    | expr MULT_OPERATOR expr
-    | expr DIV_OPERATOR expr
+    |<assoc=left> expr PLUS_OPERATOR expr
+    |<assoc=left> expr MINUS_OPERATOR expr
+    |<assoc=left>expr MULT_OPERATOR expr
+    |<assoc=left> expr DIV_OPERATOR expr
     | INT_COMPLEMENT_OPERATOR expr
     | expr LESS_OPERATOR expr
     | expr LESS_EQ_OPERATOR expr
@@ -53,3 +54,10 @@ expr
     | BOOL_TRUE
     | BOOL_FALSE
     ;
+
+//initVar
+//    : ID COMMA TYPE ASSIGN_OPERATOR expr
+//    ;
+//nonInitVar
+//    : ID COMMA TYPE
+//    ;

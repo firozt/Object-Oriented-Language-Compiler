@@ -81,8 +81,14 @@ mode STRING_MODE;
 fragment STRING_ESCAPE : '\\' [trn"'\\];
 
 END_STRING : '"' -> skip, popMode;
-STR_NULL : STR_CONST* '\u0000' STR_CONST* {setText("String contains null character.");} -> type(ERROR), popMode;
+STR_NULL : STR_CONST* '\u0000' STR_CONST* {setText("String contains null character.");} -> type(ERROR), pushMode(FIND_END_STRING);
 STR_ESCAPED_NULL : STR_CONST* '\\' '\u0000'  {setText("String contains escaped null character.");} STR_CONST* -> type(ERROR);
 STR_CONST : (~[\\\r\n"]|STRING_ESCAPE)+;
+VALID_NEWLINE : '\\' '\n' -> skip;
 // TODO HANDLE NULL \u0000
 UNTERMINATED_STRING : '\n' {setText("Unterminated string constant");} -> type(ERROR), popMode;
+EOF_IN_STRING : STR_CONST*? EOF {setText("EOF in string constant");} -> type(ERROR), popMode;
+
+mode FIND_END_STRING;
+SKIP_STRING: ~["\n] -> skip;
+END : ["\n] -> skip, popMode, popMode;
