@@ -116,7 +116,7 @@ public class ASTBuilder extends CoolParserBaseVisitor<Tree> {
         if (ctx.PLUS_OPERATOR() != null) { // expr -> e1 + e2
             ExpressionNode[] exprs = getNextExpr(2,ctx);
             return new PlusNode(line, exprs[0], exprs[1]);
-        } else if(ctx.ASSIGN_OPERATOR()!=null && ctx.ID().size()==1 && ctx.expr().size()==1 && ctx.LET()==null) { // may be confused with let expr
+        } else if(ctx.ASSIGN_OPERATOR().size()==1 && ctx.ID().size()==1 && ctx.expr().size()==1 && ctx.LET()==null) { // may be confused with let expr
             ExpressionNode e = getNextExpr(1,ctx)[0];
             Symbol name = StringTable.idtable.addString(ctx.ID(0).getText());
             return new AssignNode(line, name, e);
@@ -156,8 +156,18 @@ public class ASTBuilder extends CoolParserBaseVisitor<Tree> {
 
             ExpressionNode[] exprsPrimitive = getNextExpr(ctx.expr().size(),ctx);
             List<ExpressionNode> exprs = new ArrayList<>(Arrays.asList(exprsPrimitive));
-            ExpressionNode body = exprs.get(exprs.size()-1);
-            return LetAux(exprs,ctx,0);
+            Symbol ID = StringTable.idtable.addString(ctx.ID(0).getText());
+            Symbol type = StringTable.idtable.addString(ctx.TYPE(0).getText());
+            ExpressionNode init;
+            ExpressionNode body;
+            if (exprs.size()==1) {
+                body = exprs.get(0);
+                init = new NoExpressionNode(line);
+            } else {
+                init = exprs.get(0);
+                body = exprs.get(1);
+            }
+            return new LetNode(line,ID,type,init,body);
 
         } else if(ctx.WHILE() != null) { // expr -> while expr loop expr pool
             ExpressionNode[] exprs = getNextExpr(2,ctx);
@@ -165,7 +175,7 @@ public class ASTBuilder extends CoolParserBaseVisitor<Tree> {
         } else if(ctx.IF() != null) { // if expr then expr else expr fi
             ExpressionNode[] exprs = getNextExpr(3,ctx);
             return new CondNode(line,exprs[0],exprs[1],exprs[2]);
-        } else if(ctx.ID().size() == 1 && ctx.ASSIGN_OPERATOR()!=null && ctx.expr().size()==1) {
+        } else if(ctx.ID().size() == 1 && !ctx.ASSIGN_OPERATOR().isEmpty() && ctx.expr().size()==1) {
             ExpressionNode expr =  getNextExpr(1,ctx)[0];
             Symbol name = StringTable.idtable.addString(ctx.ID(0).getText());
             return new AssignNode(line,name,expr);
@@ -219,7 +229,7 @@ public class ASTBuilder extends CoolParserBaseVisitor<Tree> {
             return new CaseNode(line,init, branches);
         }
 
-        System.out.println("ERROR: REACHED THE END FIX IT PAL");
+        System.out.println("ERROR: COULD NOT FIND MATCH IN AST TREE");
         System.out.println(ctx.getStart().getLine());
         System.out.println(ctx.getStart().getText());
         return null;
@@ -233,35 +243,5 @@ public class ASTBuilder extends CoolParserBaseVisitor<Tree> {
         return exprs;
     }
 
-    private ExpressionNode LetAux(List<ExpressionNode> exprs, CoolParser.ExprContext ctx, int index) {
-        if(exprs.isEmpty()) {
-            return null;
-        }
-        int line = exprs.get(0).getLineNumber();
-        Symbol ID = StringTable.idtable.addString(ctx.ID(index).getText());
-        Symbol type = StringTable.idtable.addString(ctx.TYPE(index).getText());
-        ExpressionNode init = exprs.get(0);
-
-        System.out.println(
-        );
-        if (ctx.ID(index).getText().equals("z")) {
-            System.out.println("HELLO");
-        }
-
-//        if (ctx.expr(index). {
-//            System.out.println("IN");
-//            init = new NoExpressionNode(line);
-////                    TODO: LINE NUMBER MAY BE WRONG
-//        }
-
-        exprs.remove(0);
-        index++;
-        return new LetNode(line, ID, type, init, LetAux(exprs, ctx, index));
-    }
-
 
 }
-
-// 51 + 44 passed (out of 134)
-// 51 + 51 (down 11 test cases)
-// 57 + 51 (out of 134
