@@ -1,7 +1,7 @@
 import ast.*;
+import org.antlr.v4.runtime.misc.OrderedHashSet;
 
-import java.util.LinkedList;
-import java.util.List;
+import java.util.*;
 
 
 /**
@@ -17,6 +17,8 @@ class ClassTable {
      * you want.
      */
     private void installBasicClasses() {
+//        Symbol filename = Semant.filename;
+        System.out.println(StringTable.stringtable);
         Symbol filename
                 = StringTable.stringtable.addString("<basic class>");
 
@@ -60,6 +62,7 @@ class ClassTable {
                 new LinkedList<FormalNode>(),
                 TreeConstants.SELF_TYPE,
                 new NoExpressionNode(0)));
+
 
         // The IO class inherits from Object. Its methods are
         //        out_string(Str) : SELF_TYPE  writes a string to the output
@@ -189,11 +192,115 @@ class ClassTable {
 	/* Do somethind with Object_class, IO_class, Int_class,
            Bool_class, and Str_class here */
 
+//        Adding all the nodes to the tree
+        tree.add(Object_class);
+        tree.add(Str_class);
+        tree.add(IO_class);
+        tree.add(Bool_class);
+        tree.add(Int_class);
+        Semant.filename = Object_class.getFilename();
+        System.out.println(filename);
+
     }
 
+    InheritanceTree tree;
     public ClassTable(List<ClassNode> cls) {
-    	/* fill this in */
+        this.tree = new InheritanceTree();
+        installBasicClasses();
+
+        int numClasses = cls.size();
+        int numRetries = 0;
+        while (!cls.isEmpty()) {
+            if (Utilities.errors()) break;
+            ClassNode c = cls.get(0);
+            if (!tree.add(c)) {
+                // move item to the back of the list and keep going
+                cls.remove(0);
+                cls.add(c);
+                numRetries++;
+            } else {
+                cls.remove(0);
+            }
+            if (numRetries > 3*numClasses) { // maximum potential tries before its for sure invalid
+                for (ClassNode n : cls) {
+                    String errorMsg = "Class " + n.getName().getName() + ", or an ancestor of " + n.getName().getName() + ", is involved in an inheritance cycle.";
+                    Utilities.semantError(c).println(errorMsg);
+                }
+            }
+        }
     }
 }
 
     
+class InheritanceTree {
+    InheritanceTreeNode root;
+    boolean hasCycle; // true if the tree has a cycle
+
+    InheritanceTree() {
+        this.root = null;
+    }
+
+//    boolean returns if value was added or not, with edge case of bad inhertiance of default classes
+//    this will return true but semant error will be incremented
+    public boolean add(ClassNode node){
+        // case that this is the first node (most likely object)
+        InheritanceTreeNode inheritanceNode = new InheritanceTreeNode(node);
+        if (root == null) {
+            this.root = inheritanceNode;
+            return true;
+        }
+        // if no parent is specified, then make it Object (root of all classes)
+        Symbol parent = node.getParent().getName().equals("_no_class") ? TreeConstants.Object_ : node.getParent();
+
+//        inherits from a bad class (str, int, bool)
+        if (parent.equals(TreeConstants.Bool) || parent.equals(TreeConstants.Int) || parent.equals(TreeConstants.Str)) {
+//            TODO: May be invalid?
+            Utilities.semantError(node).println("Class "+ node.getName().getName() + " cannot inherit class " + parent.getName());
+            return true;
+        }
+
+//        search the tree for parent node
+        InheritanceTreeNode parentNode = dfs_traverser(root, parent);
+        if (parentNode==null) { // cant find parent cannot add
+            return false;
+        }
+        parentNode.addChild(inheritanceNode);
+        return true;
+
+    }
+
+    public InheritanceTreeNode dfs_traverser(InheritanceTreeNode root, Symbol parent) {
+        // base cases
+        if (root == null) {
+            return null;
+        }
+        if (root.getName().getName().equals(parent.getName())) {
+            return root;
+        }
+
+        // step case
+        for (InheritanceTreeNode child : root.children) {
+            InheritanceTreeNode res = dfs_traverser(child, parent);
+            if (res != null) {
+                return res;
+            }
+        }
+        return null;
+    }
+
+}
+
+class InheritanceTreeNode extends ClassNode {
+    List<InheritanceTreeNode> children; // directed, this node is dest, edge[n] is the start
+
+    public InheritanceTreeNode(ClassNode val) {
+        super(val.getLineNumber(), val.getName(), val.getParent(), val.getFilename());
+        this.children = new ArrayList<>();
+    }
+
+    public void addChild(InheritanceTreeNode child) {
+        this.children.add(child);
+    }
+
+
+}
