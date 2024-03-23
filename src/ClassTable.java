@@ -17,10 +17,9 @@ class ClassTable {
      * you want.
      */
     private void installBasicClasses() {
-//        Symbol filename = Semant.filename;
-        System.out.println(StringTable.stringtable);
-        Symbol filename
-                = StringTable.stringtable.addString("<basic class>");
+        Symbol filename = Semant.filename;
+//        Symbol filename
+//                = StringTable.stringtable.addString("<basic class>");
 
         LinkedList<FormalNode> formals;
 
@@ -199,7 +198,6 @@ class ClassTable {
         tree.add(Bool_class);
         tree.add(Int_class);
         Semant.filename = Object_class.getFilename();
-        System.out.println(filename);
 
     }
 

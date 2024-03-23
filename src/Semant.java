@@ -8,7 +8,7 @@ class Semant {
 
     public static ClassTable classTable;
     public static SymbolTable<Pair<Symbol, Kind>> symtable = new SymbolTable();
-    public static Symbol filename;
+    public static Symbol filename = getFileName();
 
     public static void analyze(ProgramNode program) {
         ArrayList<ClassNode> cls =(ArrayList<ClassNode>) (new ArrayList<>(program.getClasses()).clone());
@@ -24,8 +24,22 @@ class Semant {
         }
     }
 
+//    TODO find out how to actually do this
+    public static Symbol getFileName() {
+        ArrayList<Symbol> syms = new ArrayList<>(StringTable.stringtable.values());
+        for (Symbol sym : syms) {
+            String s = sym.getName();
+            int len = s.length();
+            if (len > 3 && s.substring(len-3,len).equals(".cl")) {
+                return sym;
+            }
+        }
+        return null;
+    }
+
 }
 // -------------- Helper Classes -------------- //
+
 
 
 /*
