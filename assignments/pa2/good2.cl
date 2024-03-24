@@ -1,6 +1,20 @@
-class Hey{
- x: String <- "WOW";
- y: String <- "WOW1!";
- z: String <- "string3";
- main(): Object {1};
+-- class Main inherits IO{
+--  x:Bool;
+--  main(): Object {{ 
+--                     ~7;
+--                     ~foo();
+--                 }};
+--  foo(): Int {4};
+-- };
+class Main inherits IO{
+ attr: B;
+ main(): SELF_TYPE {
+  attr.foo()
+ };
+--  foo(x: Int) : Int {x+3};
+};
+class B {
+ foo() : SELF_TYPE {
+    self
+ };
 };
