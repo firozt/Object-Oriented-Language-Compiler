@@ -35,9 +35,11 @@ public class TypeCheckingVisitor extends BaseVisitor<Object, Object> {
 
         currentClass = node; // update current class
         symtable2.enterScope(); // make new scope
-        Semant.loadInheritedClassScopes(node, symtable2); // loads inherited class features
+        int numPops = Semant.loadInheritedClassScopes(node, symtable2); // loads inherited class features
         Object res = super.visit(node, data); // visits all features
-        symtable2.exitScope();
+        for (int i = 0; i < numPops; i++) { // unloads class and all inherited classes
+            symtable2.exitScope();
+        }
         return ret;
     }
 
@@ -53,9 +55,8 @@ public class TypeCheckingVisitor extends BaseVisitor<Object, Object> {
             return ret;
         }
 //        TODO unsure if we should return early in an invalid var name
-
         // checks if attribute is already defined which is invalid (checks inherited class also)
-        if (symtable2.lookup(node.getName())!=null) {
+        if (symtable2.lookup(node.getName())!=null ) { // if its defined but not in this class
             Utilities.semantError(Semant.filename,node)
                     .println("Attribute "+node.getName().getName()+" is an attribute of an inherited class.");
         }
@@ -141,8 +142,6 @@ public class TypeCheckingVisitor extends BaseVisitor<Object, Object> {
 
     @Override
     public Object visit(ObjectNode node, Object data) {
-        System.out.println("IN " +node.getName().getName());
-
         // variable can be of any type
         // we need to check Stringtable to find out type
         Tuple<Symbol, Kind, MethodSignature, Symbol> symtableData = symtable2.lookup(node.getName());
@@ -223,7 +222,6 @@ public class TypeCheckingVisitor extends BaseVisitor<Object, Object> {
                     .println("Argument of 'not' has type "+node.getE1().getType()+" instead of Bool");
         }
 
-        System.out.println("IN COMPNODE");
         return ret;
     }
 
@@ -271,6 +269,8 @@ public class TypeCheckingVisitor extends BaseVisitor<Object, Object> {
                     .println("Illegal comparison with a basic type");
         }
 
+        node.setType(TreeConstants.Bool);
+
         return res;
     }
 
@@ -278,8 +278,21 @@ public class TypeCheckingVisitor extends BaseVisitor<Object, Object> {
     public Object visit(LEqNode node, Object data) {
 //        less than or equal to
 //        can only be done on ints, returns bool
+        visit(node.getE1(),data);
+        visit(node.getE2(),data);
 
-        return super.visit(node, data);
+        if (node.getE1().getType() != TreeConstants.Int) { // e1 not int
+            Utilities.semantError(Semant.filename, node)
+                    .println("non-Int arguments: "+ node.getE1().getType().getName() +" <= Int");
+        }
+        else if (node.getE2().getType() != TreeConstants.Int) { // e2 not int
+            Utilities.semantError(Semant.filename, node)
+                    .println("non-Int arguments: "+ node.getE2().getType().getName() +" <= Int");
+        }
+
+        node.setType(TreeConstants.Bool);
+
+        return ret;
     }
 
     @Override
@@ -385,6 +398,12 @@ public class TypeCheckingVisitor extends BaseVisitor<Object, Object> {
     }
 
 
+    @Override
+    public Object visit(StaticDispatchNode node, Object data) {
+        System.out.println("IN STATIC DISPATCH");
+        return super.visit(node, data);
+    }
+
 
     @Override
     public Object visit(DispatchNode node, Object data) {
@@ -392,7 +411,6 @@ public class TypeCheckingVisitor extends BaseVisitor<Object, Object> {
         // check arguments passed in match arguments of declration
         // if all is good, set the return type to the return type of the method declaration
         // else set it as object
-
         node.setType(TreeConstants.Object_); // will get overwritten if no semantic errors occur
 
         Tuple<Symbol, Kind, MethodSignature, Symbol> symtableData = symtable2.lookup(node.getName());
@@ -400,7 +418,6 @@ public class TypeCheckingVisitor extends BaseVisitor<Object, Object> {
         if (symtableData == null && Semant.classTable.searchFeatures(currentClass, node.getName())) {
             // default method
 //            TODO fix this, by adding default methods to the symtable on program visit
-            node.setType(TreeConstants.Object_);
             return ret;
         }
 
@@ -437,7 +454,7 @@ public class TypeCheckingVisitor extends BaseVisitor<Object, Object> {
         }
 
 
-        node.setType(symtableData.first);
+        node.setType(symtableData.first); // gets method return type
         return ret;
     }
 
@@ -514,5 +531,23 @@ public class TypeCheckingVisitor extends BaseVisitor<Object, Object> {
 
         return ret;
 //        return super.visit(node, data);
+    }
+
+    @Override
+    public Object visit(LoopNode node, Object data) {
+        // condition must be bool
+        // loop always returns type Object
+        node.setType(TreeConstants.Object_);
+        visit(node.getCond(),data);
+        visit(node.getBody(),data);
+
+        if (node.getCond().getType() != TreeConstants.Bool) {
+            Utilities.semantError(Semant.filename, node)
+                    .println("Loop condition does not have type Bool");
+        }
+
+
+
+        return super.visit(node, data);
     }
 }

@@ -1,9 +1,7 @@
 import ast.*;
+import com.sun.tools.javac.Main;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Stack;
+import java.util.*;
 
 /* ------------------------------- High level view of the program -------------------------------
  *
@@ -40,7 +38,7 @@ class Semant {
     public static void analyze(ProgramNode program) {
         ArrayList<ClassNode> cls =(ArrayList<ClassNode>) (new ArrayList<>(program.getClasses()).clone());
         classTable = new ClassTable(cls);
-
+        checkForMain(program.getClasses(), classTable.tree, program);
 
 //        TODO: maybe go into typechecking instead?
         ScopeCheckingVisitor scopecheckVisitor = new ScopeCheckingVisitor();
@@ -73,17 +71,52 @@ class Semant {
         return null;
     }
 
+    public static void checkForMain(List<ClassNode> cls, InheritanceTree tree, ProgramNode root) {
+        // check for main class
+        ClassNode MainClass = null;
+        for (ClassNode c : cls) {
+            if (c.getName() == TreeConstants.Main) {
+                MainClass = c;
+            }
+        }
+        if (MainClass == null) {
+            Utilities.semantError(Semant.filename, root)
+                    .println("Class Main is not defined");
+            return;
+        }
+
+        List<MethodNode> methods = new ArrayList<>();
+        classTable.tree.seperateFeatures(MainClass.getFeatures(),methods, new ArrayList<>());
+        // methods now filled
+        MethodNode main = null;
+        for (MethodNode m : methods) {
+            if (m.getName() == TreeConstants.main_meth) {
+                main = m;
+            }
+        }
+        if (main == null) {
+            Utilities.semantError(Semant.filename, root)
+                    .println("No 'main' method in class Main");
+        }
+
+    }
+
     /*
         Loads the symboltable with features from its inherited classes
         uses the inheritance tree to find scope of visibilty, then
         adds all methods and features that each class contains
+        returns number of scopes created
      */
-    public static void loadInheritedClassScopes(ClassNode classNode, SymbolTable sym) {
+    public static int loadInheritedClassScopes(ClassNode classNode, SymbolTable sym) {
         Stack<InheritanceTreeNode> path = new Stack<>();
         classTable.tree.getClassVisiblity(classTable.tree.root,classNode, path);
-        path.pop(); // remove current class as we will find its visibility while traversing anyway
+        path.pop(); // remove current class
+
+        Collections.reverse(path); // start building from top of tree to bottom
+        int res = path.size();
         while(!path.isEmpty()) {
             ClassNode cur = path.pop();
+
             List<MethodNode> methods = new ArrayList<>();
             List<AttributeNode> attrs = new ArrayList<>();
             classTable.tree.seperateFeatures(cur.getFeatures(),methods,attrs);
@@ -122,8 +155,11 @@ class Semant {
                         )
                 );
             }
+            // all features of this class have been added,
+            // enter a new scope for the next class
+            sym.enterScope();
         }
-
+        return res+1;
     }
 
 }
