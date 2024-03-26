@@ -1,4 +1,5 @@
 import ast.*;
+import org.w3c.dom.Attr;
 
 import java.util.*;
 
@@ -247,24 +248,42 @@ class ClassTable {
         Stack<InheritanceTreeNode> path = new Stack<>();
         tree.getClassVisiblity(tree.root,classNode,path);
         // stack has the path from object -> class, visibility of all features
-        while (!path.isEmpty()) {
-            InheritanceTreeNode cur = path.pop();
-            for(FeatureNode f : cur.getFeatures()) {
-                if (f instanceof MethodNode m) {
-                    if (m.getName().equals(Identifier)) {
-                        return true;
-                    }
-                } else if(f instanceof AttributeNode a) {
-                    if (a.getName().equals(Identifier)) {
-                        return true;
-                    }
+//        while (!path.isEmpty()) {
+//            InheritanceTreeNode cur = path.pop();
+//            for(FeatureNode f : cur.getFeatures()) {
+//                if (f instanceof MethodNode m) {
+//                    if (m.getName().equals(Identifier)) {
+//                        return true;
+//                    }
+//                } else if(f instanceof AttributeNode a) {
+//                    if (a.getName().equals(Identifier)) {
+//                        return true;
+//                    }
+//
+//
+//                } else {
+//                    System.err.println("Feature is neither method nor Attribute");
+//                    System.exit(-1);
+//                }
+//            }
+//        }
 
+        for(InheritanceTreeNode node : path) {
 
-                } else {
-                    System.err.println("Feature is neither method nor Attribute");
-                    System.exit(-1);
+            List<MethodNode> methods = new ArrayList<>();
+            List<AttributeNode> attributes = new ArrayList<>();
+            tree.seperateFeatures(node.getFeatures(),methods, attributes);
+            for (MethodNode m : methods) {
+                if (m.getName().equals(Identifier)) {
+                    return true;
                 }
             }
+            for (AttributeNode a: attributes) {
+                if (a.getName().equals(Identifier)) {
+                    return true;
+                }
+            }
+
         }
 
         return false;
@@ -355,13 +374,22 @@ class InheritanceTree {
     // checks if type1 is a subtype of type2 by finding the parent in the inheritance
     // graph and checking if the child node is in the parents subtree
     public boolean isSubType(Symbol type1, Symbol type2) {
+        if (type1 == null) {
+            System.err.println("TYPE1 IS NULL");
+            System.out.println("TYPE2 IS " + type2);
+        }
+        if (type2 == null) {
+            System.err.println("TYPE2 IS NULL");
+            System.out.println("TYPE1 IS " + type1);
+        }
         // save computational work
         if (type1 == TreeConstants.Object_)  {
             return true;
         }
 
-        if (type1 == TreeConstants.SELF_TYPE) {
+        if (type1 == TreeConstants.SELF_TYPE || type2 == TreeConstants.SELF_TYPE) {
             type1 = TypeCheckingVisitor.currentClass.getName();
+            return true; // TODO IMPLEMENT SELF
         }
         InheritanceTreeNode parentNode = findClass(root, type2);
         // now run dfs_traverser again but on the parent subtree, and search for type1 node
@@ -394,6 +422,23 @@ class InheritanceTree {
         }
         return false;
     }
+
+    // seperates attribute and methods into two lists passed in through args
+    public void seperateFeatures(List<FeatureNode> features, List<MethodNode> methods, List<AttributeNode> attributes) {
+        for (FeatureNode f : features) {
+            if (f instanceof AttributeNode a) {
+                attributes.add(a);
+            } else if (f instanceof MethodNode m) {
+                methods.add(m);
+            } else {
+                System.out.println(f.getClass().getSimpleName());
+                System.err.println("Feature is neither attribute nor method");
+                System.exit(-1);
+            }
+
+        }
+
+    }
 }
 
 class InheritanceTreeNode extends ClassNode {
@@ -411,6 +456,7 @@ class InheritanceTreeNode extends ClassNode {
     public void addChild(InheritanceTreeNode child) {
         this.children.add(child);
     }
+
 
 
 }

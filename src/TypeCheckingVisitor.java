@@ -1,10 +1,7 @@
 import ast.*;
 import ast.visitor.BaseVisitor;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Stack;
+import java.util.*;
 
 public class TypeCheckingVisitor extends BaseVisitor<Object, Object> {
     static SymbolTable<Tuple<Symbol,Kind,MethodSignature, Symbol>> symtable2 = new SymbolTable<>(); // maps id -> type
@@ -23,8 +20,22 @@ public class TypeCheckingVisitor extends BaseVisitor<Object, Object> {
 
     @Override
     public Object visit(ClassNode node, Object data) { // class
-        currentClass = node;
-        symtable2.enterScope();
+        // it is invalid to redefine a default class,
+        Set<Symbol> DefaultClassNames = Set.of(
+                TreeConstants.Int,
+                TreeConstants.Str,
+                TreeConstants.Bool,
+                TreeConstants.IO,
+                TreeConstants.Object_
+        );
+        if (DefaultClassNames.contains(node.getName())) {
+            Utilities.semantError(Semant.filename,node)
+                    .println("Redefinition of basic class "+node.getName()+".");
+        }
+
+        currentClass = node; // update current class
+        symtable2.enterScope(); // make new scope
+        Semant.loadInheritedClassScopes(node, symtable2); // loads inherited class features
         Object res = super.visit(node, data); // visits all features
         symtable2.exitScope();
         return ret;
@@ -33,8 +44,23 @@ public class TypeCheckingVisitor extends BaseVisitor<Object, Object> {
     @Override
     public Object visit(AttributeNode node, Object data) {
         // attribute has an optional init that we need to check
-        // attribute
         // add type to second symtable
+
+        // attribute name cannot be self
+        if (node.getName().equals(TreeConstants.self)) {
+            Utilities.semantError(Semant.filename, node)
+                    .println("'self' cannot be the name of an attribute.");
+            return ret;
+        }
+//        TODO unsure if we should return early in an invalid var name
+
+        // checks if attribute is already defined which is invalid (checks inherited class also)
+        if (symtable2.lookup(node.getName())!=null) {
+            Utilities.semantError(Semant.filename,node)
+                    .println("Attribute "+node.getName().getName()+" is an attribute of an inherited class.");
+        }
+
+        // add id to symtable
         symtable2.addId(
                 node.getName(),
                 new Tuple<>(
@@ -61,6 +87,24 @@ public class TypeCheckingVisitor extends BaseVisitor<Object, Object> {
                             "Inferred type "+node.getType_decl()+" of initialization of attribute "+node.getInit().getType()+" does not conform to declared type "+node.getType_decl()+"."
                     );
         }
+        return ret;
+    }
+
+    @Override
+    public Object visit(AssignNode node, Object data) {
+        // assign node
+        // check expr type == symboltable type
+
+        visit(node.getExpr(),data);
+        Symbol nodeType = symtable2.lookup(node.getName()).first;
+        if (!Semant.classTable.tree.isSubType(node.getExpr().getType(),nodeType)) {
+            Utilities.semantError(Semant.filename,node)
+                    .println("Type "+ node.getExpr().getType().getName() +" of assigned expression does not conform to declared type "+nodeType.getName()+" of identifier "+node.getName().getName()+".");
+            node.setType(TreeConstants.Object_);
+            return ret;
+        }
+        node.setType(nodeType);
+
         return ret;
     }
 
@@ -97,10 +141,11 @@ public class TypeCheckingVisitor extends BaseVisitor<Object, Object> {
 
     @Override
     public Object visit(ObjectNode node, Object data) {
+        System.out.println("IN " +node.getName().getName());
+
         // variable can be of any type
         // we need to check Stringtable to find out type
         Tuple<Symbol, Kind, MethodSignature, Symbol> symtableData = symtable2.lookup(node.getName());
-
 
         // edge case of self keyword
         if (node.getName().equals(TreeConstants.self)) {
@@ -158,6 +203,30 @@ public class TypeCheckingVisitor extends BaseVisitor<Object, Object> {
      */
 
     @Override
+    public Object visit(IsVoidNode node, Object data) {
+        // isvoid operator
+        // takes any type
+        // return true if var is void else false
+        // we only need to put the return type, nothing else
+        node.setType(TreeConstants.Bool);
+        return super.visit(node, data);
+    }
+
+    @Override
+    public Object visit(CompNode node, Object data) {
+        // '!' operator
+        // only takes in bool, returns bool
+        node.setType(TreeConstants.Bool);
+        visit(node.getE1(),data);
+        if (node.getE1().getType() != TreeConstants.Bool) {
+            Utilities.semantError(Semant.filename,node)
+                    .println("Argument of 'not' has type "+node.getE1().getType()+" instead of Bool");
+        }
+
+        System.out.println("IN COMPNODE");
+        return ret;
+    }
+
     public Object visit(NegNode node, Object data) {
         // negation node
         // can only take in ints, returns int
@@ -174,10 +243,9 @@ public class TypeCheckingVisitor extends BaseVisitor<Object, Object> {
 
     @Override
     public Object visit(NewNode node, Object data) {
-        return super.visit(node, data);
+        node.setType(node.getType_name());
+        return ret;
     }
-
-    //    ---------------------- END ----------------------    //
 
 
     //    ---------------------- COMPARISON OPERATIONS ----------------------    //
@@ -218,28 +286,37 @@ public class TypeCheckingVisitor extends BaseVisitor<Object, Object> {
     public Object visit(EqNode node, Object data) {
         // equality operator '='
         // has two expr children, visit each
-        // must be of type int, str, bool to be a valid cool opeartion
-        List<Symbol> validTypes = new ArrayList<>(
-                List.of(
-                        TreeConstants.Int,
-                        TreeConstants.Str,
-                        TreeConstants.Bool)
+        // any two types can be compared except for if
+        // type is int, str, bool, they must both be same type
+        Set<Symbol>  mustBeSame = Set.of(
+                TreeConstants.Int,
+                TreeConstants.Str,
+                TreeConstants.Bool
         );
+
 
         visit(node.getE1(), data);
         visit(node.getE2(), data);
+
         if (
-                !node.getE1().getType().equals(node.getE2().getType()) ||
-                !validTypes.contains(node.getE1().getType())
+                ( mustBeSame.contains(node.getE2().getType()) || mustBeSame.contains(node.getE1().getType()) ) &&
+                ( node.getE1().getType() != node.getE2().getType() )
+
         ) {
             Utilities.semantError(Semant.filename,node)
                     .println("Illegal comparison with a basic type");
         }
+
+
+//        if (
+//                !node.getE1().getType().equals(node.getE2().getType()) ||
+//        ) {
+//            Utilities.semantError(Semant.filename,node)
+//                    .println("Illegal comparison with a basic type");
+//        }
         node.setType(TreeConstants.Bool);
         return ret;
     }
-    //    ---------------------- END ----------------------    //
-
 
 //    ---------------------- ARITH OPERATIONS ----------------------    //
     /*
@@ -289,8 +366,6 @@ public class TypeCheckingVisitor extends BaseVisitor<Object, Object> {
         return super.visit(node, data);
     }
 
-    //    ---------------------- END ----------------------    //
-
     //    --------------------- MISC ----------------------   //
 
     @Override
@@ -336,6 +411,7 @@ public class TypeCheckingVisitor extends BaseVisitor<Object, Object> {
         }
 
 
+
         List<Symbol> argTypes = symtableData.third.formalTypes;
         List<Symbol> actualsTypes = new ArrayList<>();
         List<Symbol> actualNames = symtableData.third.formalNames;
@@ -362,7 +438,6 @@ public class TypeCheckingVisitor extends BaseVisitor<Object, Object> {
 
 
         node.setType(symtableData.first);
-
         return ret;
     }
 
@@ -373,6 +448,7 @@ public class TypeCheckingVisitor extends BaseVisitor<Object, Object> {
     public Object visit(MethodNode node, Object data) {
         // method
         // we have to check that the return type of the expr is a valid type of the methods return
+        // we also need to add method signature to symbol table
 
         // add type to symboltabe, along with formal types
         List<Symbol> formalsType = node // list of signature type
@@ -400,21 +476,41 @@ public class TypeCheckingVisitor extends BaseVisitor<Object, Object> {
                                 currentClass.getName()
                         )
                 );
-        // type check method body
-        Object res = visit(node.getExpr(),data);
 
+        // enter new scope to visit method
+        symtable2.enterScope();
+
+        // add formals to scope
+
+        for (int i = 0; i < formalsType.size(); i++) {
+            symtable2.addId(
+                    formalsName.get(i),
+                    new Tuple<>(
+                            formalsType.get(i),
+                            Kind.VAR,
+                            null,
+                            currentClass.getName()
+                    )
+                    );
+        }
+        // visit method
+        visit(node.getExpr(),data);
+        // exit scope
+        symtable2.exitScope();
+
+        // i didnt implement the visit for an expression node
         if (node.getExpr().getType() == null) {
             System.out.println("Did not handle expr case of " +node.getExpr().toString()+ ". (might wanna check that out)");
-            return super.visit(node, data);
+
         }
 
+        // type check method body
         if (!Semant.classTable.tree.isSubType(node.getExpr().getType(),node.getReturn_type())) {
             Utilities.semantError(Semant.filename,node)
                     .println(
                             "Inferred return type "+node.getExpr().getType().getName()+" of method "+node.getName().getName()+" does not conform to declared return type "+node.getReturn_type().getName()+"."
                     );
         }
-
 
         return ret;
 //        return super.visit(node, data);

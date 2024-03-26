@@ -1,7 +1,9 @@
 import ast.*;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Stack;
 
 /* ------------------------------- High level view of the program -------------------------------
  *
@@ -23,7 +25,7 @@ import java.util.List;
  *  variables are in scope and valid. We will use this information later on
  *
  *  The third phase is now the type checking done by the TypeCheckingVisitor class. It works similarly
- *  to the ScopeChckingVisitor as it also keeps a SymbolTable of ID's but unlike the scope checking phase
+ *  to the ScopeChckingVis §itor as it also keeps a SymbolTable of ID's but unlike the scope checking phase
  *  this is mainly used to deduce type values from objects and method call (dispatch) return types
  *
 */
@@ -62,11 +64,66 @@ class Semant {
         for (Symbol sym : syms) {
             String s = sym.getName();
             int len = s.length();
-            if (len > 3 && s.substring(len-3,len).equals(".cl")) {
+            if (len > 3 && (s.substring(len-3,len).equals(".cl"))) {
+                return sym;
+            } if (len > 5 &&  s.substring(len-5,len).equals(".test")) {
                 return sym;
             }
         }
         return null;
+    }
+
+    /*
+        Loads the symboltable with features from its inherited classes
+        uses the inheritance tree to find scope of visibilty, then
+        adds all methods and features that each class contains
+     */
+    public static void loadInheritedClassScopes(ClassNode classNode, SymbolTable sym) {
+        Stack<InheritanceTreeNode> path = new Stack<>();
+        classTable.tree.getClassVisiblity(classTable.tree.root,classNode, path);
+        path.pop(); // remove current class as we will find its visibility while traversing anyway
+        while(!path.isEmpty()) {
+            ClassNode cur = path.pop();
+            List<MethodNode> methods = new ArrayList<>();
+            List<AttributeNode> attrs = new ArrayList<>();
+            classTable.tree.seperateFeatures(cur.getFeatures(),methods,attrs);
+            for(MethodNode m : methods) {
+                List<Symbol> formalsType = m // list of signature type
+                        .getFormals()
+                        .stream()
+                        .map(f -> f.getType_decl())
+                        .toList();
+                List<Symbol> formalsName = m // list of signature variable names
+                        .getFormals()
+                        .stream()
+                        .map(f -> f.getName())
+                        .toList();
+                sym.addId(
+                        m.getName(),
+                        new Tuple<>(
+                                m.getReturn_type(),
+                                Kind.METHOD,
+                                new MethodSignature(
+                                        formalsType,
+                                        formalsName,
+                                        cur.getName()
+                                ), cur.getName()
+
+                        )
+                        );
+            }
+            for (AttributeNode a : attrs) {
+                sym.addId(a.getName(),
+                        new Tuple<>(
+                                a.getType_decl(),
+                                Kind.VAR,
+                                null,
+                                cur.getName()
+                        )
+                );
+            }
+        }
+
     }
 
 }

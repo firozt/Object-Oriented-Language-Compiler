@@ -1,0 +1,1 @@
+lexer $@ | parser $@ | java -cp .:/Users/roooge/Desktop/school/third-year/compilers/ECS652U-cw-distro/ECS652U-cw-200829225/lib/antlr-4.6-complete.jar: Analysis $@
