@@ -38,22 +38,20 @@ class Semant {
     public static void analyze(ProgramNode program) {
         ArrayList<ClassNode> cls =(ArrayList<ClassNode>) (new ArrayList<>(program.getClasses()).clone());
         classTable = new ClassTable(cls);
+
+        if (Utilities.errors()) Utilities.fatalError(Utilities.ErrorCode.ERROR_SEMANT);
+
         checkForMain(program.getClasses(), classTable.tree, program);
 
-//        TODO: maybe go into typechecking instead?
         ScopeCheckingVisitor scopecheckVisitor = new ScopeCheckingVisitor();
         program.accept(scopecheckVisitor, null);
 
-        if (Utilities.errors()) {
-            Utilities.fatalError(Utilities.ErrorCode.ERROR_SEMANT);
-        }
+        if (Utilities.errors()) Utilities.fatalError(Utilities.ErrorCode.ERROR_SEMANT);
 
         TypeCheckingVisitor typecheckVisitor = new TypeCheckingVisitor();
         program.accept(typecheckVisitor, null);
 
-        if (Utilities.errors()) {
-            Utilities.fatalError(Utilities.ErrorCode.ERROR_SEMANT);
-        }
+        if (Utilities.errors()) Utilities.fatalError(Utilities.ErrorCode.ERROR_SEMANT);
     }
 
 //    TODO find out how to actually do this

@@ -214,6 +214,9 @@ class ClassTable {
         int numRetries = 0;
 
         while (!cls.isEmpty()) {
+            if (Utilities.errors()) {
+                return; // class inherits from illegal class
+            }
             ClassNode c = cls.get(0);
             if (!tree.add(c)) {
                 // parent class does not exist in graph yet, move to the back of the list
@@ -289,6 +292,54 @@ class ClassTable {
         return false;
     }
 
+    public MethodNode getMethod(ClassNode c, Symbol ID) {
+        List<FeatureNode> feats = c.getFeatures();
+        List<MethodNode> methods = new ArrayList<>();
+        tree.seperateFeatures(feats, methods, new ArrayList<>());
+        for (MethodNode m : methods) {
+            if (m.getName() == ID) {
+                return m;
+            }
+        }
+        return null;
+    }
+
+    // checks if a feature is within a current class (not including inherited features)
+    public boolean isValidForwardReference(ClassNode c, Symbol Identifier) {
+        List<FeatureNode> feats = c.getFeatures();
+        List<MethodNode> methods = new ArrayList<>();
+        List<AttributeNode> attrs = new ArrayList<>();
+        tree.seperateFeatures(feats, methods, attrs);
+        for (MethodNode m : methods) {
+            if (m.getName() == Identifier) {
+                return true;
+            }
+        }
+        for (AttributeNode a : attrs) {
+            if (a.getName() == Identifier) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public FeatureNode featureExistOnClass(Symbol className, Symbol feature) {
+        InheritanceTreeNode classNode = tree.findClass(tree.root, className);
+        List<MethodNode> methods = new ArrayList<>();
+        List<AttributeNode> attrs = new ArrayList<>();
+        tree.seperateFeatures(classNode.getFeatures(),methods,attrs);
+        for (MethodNode m : methods) {
+            if (m.getName() == feature) {
+                return m;
+            }
+        }
+        for (AttributeNode a : attrs) {
+            if (a.getName() == feature) {
+                return a;
+            }
+        }
+        return null;
+    }
 
 }
 
@@ -351,7 +402,7 @@ class InheritanceTree {
 
     // searches for a node (typically parent), if it exists returns it else returns null
     // uses dfs
-    private InheritanceTreeNode findClass(InheritanceTreeNode root, Symbol parent) {
+    public InheritanceTreeNode findClass(InheritanceTreeNode root, Symbol parent) {
         // base cases
         if (root == null) {
             return null;
@@ -371,9 +422,57 @@ class InheritanceTree {
     }
 
 
+    // gets lowest upper bound of two classes (represented as symbols)
+    // ------------------- IMPLEMENTATION ------------------- //
+    // im going to use the fact that every class inherits object
+    // we will obtain the path from root -> class1 and root -> class2
+    // we will iterate through the path, the lub(A,B) is the last class
+    // both paths share in common
+    public Symbol lub(Symbol type1, Symbol type2) {
+        InheritanceTreeNode class1 = findClass(root,type1);
+        InheritanceTreeNode class2 = findClass(root,type2);
+
+        Stack<InheritanceTreeNode> path1 = new Stack<>();
+        Stack<InheritanceTreeNode> path2 = new Stack<>();
+        getClassVisiblity(root, class1, path1);
+        getClassVisiblity(root, class2, path2);
+        // paths are now filled
+
+        // make it so class object is first (top down)
+        Collections.reverse(path1);
+        Collections.reverse(path2);
+        InheritanceTreeNode lub = null;
+        while (!path1.isEmpty() && !path2.isEmpty()) {
+            InheritanceTreeNode cur1 = path1.pop();
+            InheritanceTreeNode cur2 = path2.pop();
+            if (cur1.getName() == cur2.getName()) {
+                lub = cur1;
+            } else {
+                // once one is not the same, lub cannot be further down
+                break;
+            }
+        }
+        // null pointer is not possible if method is used correctly
+        return lub.getName();
+
+    }
+
+    // calls lub(x,y) multiple times
+    // uses the fact lub(x,y,z) == lub(lub(x,y),z)
+    public Symbol lub(List<Symbol> types) {
+        Symbol res = null;
+        for(int i = 0; i < types.size()-1; i++) {
+            res = lub(types.get(i),types.get(i+1));
+        }
+        return res;
+    }
+
     // checks if type1 is a subtype of type2 by finding the parent in the inheritance
     // graph and checking if the child node is in the parents subtree
     public boolean isSubType(Symbol type1, Symbol type2) {
+//        System.out.println("CHECKING IF : " + type1.getName() + " IS A SUBTYPE OF " + type2.getName());
+
+        // defining some edge cases, and obvious cases to save computation
         if (type1 == null) {
             System.err.println("TYPE1 IS NULL");
             System.out.println("TYPE2 IS " + type2);
@@ -382,8 +481,8 @@ class InheritanceTree {
             System.err.println("TYPE2 IS NULL");
             System.out.println("TYPE1 IS " + type1);
         }
-        // save computational work
-        if (type1 == TreeConstants.Object_)  {
+        // save computational work, object is a superset of all
+        if (type2 == TreeConstants.Object_)  {
             return true;
         }
 
@@ -391,8 +490,11 @@ class InheritanceTree {
             type1 = TypeCheckingVisitor.currentClass.getName();
             return true; // TODO IMPLEMENT SELF
         }
+
+
         InheritanceTreeNode parentNode = findClass(root, type2);
-        // now run dfs_traverser again but on the parent subtree, and search for type1 node
+
+//         now run dfs_traverser again but on the parent subtree, and search for type1 node
         return findClass(parentNode, type1) != null;
     }
 
@@ -407,6 +509,10 @@ class InheritanceTree {
     public boolean getClassVisiblity(InheritanceTreeNode root, ClassNode search , Stack<InheritanceTreeNode> path) {
         if (root == null) {
             return false;
+        }
+
+        if (root == this.root) { // case that this is first value, add root
+            path.push(findClass(this.root,TreeConstants.Object_));
         }
         if (root.getName().equals(search.getName())) {
             return true;
@@ -431,7 +537,6 @@ class InheritanceTree {
             } else if (f instanceof MethodNode m) {
                 methods.add(m);
             } else {
-                System.out.println(f.getClass().getSimpleName());
                 System.err.println("Feature is neither attribute nor method");
                 System.exit(-1);
             }

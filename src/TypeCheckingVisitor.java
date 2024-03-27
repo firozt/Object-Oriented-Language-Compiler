@@ -20,18 +20,6 @@ public class TypeCheckingVisitor extends BaseVisitor<Object, Object> {
 
     @Override
     public Object visit(ClassNode node, Object data) { // class
-        // it is invalid to redefine a default class,
-        Set<Symbol> DefaultClassNames = Set.of(
-                TreeConstants.Int,
-                TreeConstants.Str,
-                TreeConstants.Bool,
-                TreeConstants.IO,
-                TreeConstants.Object_
-        );
-        if (DefaultClassNames.contains(node.getName())) {
-            Utilities.semantError(Semant.filename,node)
-                    .println("Redefinition of basic class "+node.getName()+".");
-        }
 
         currentClass = node; // update current class
         symtable2.enterScope(); // make new scope
@@ -82,7 +70,7 @@ public class TypeCheckingVisitor extends BaseVisitor<Object, Object> {
             return ret; // no expr which is valid
         }
 
-        if (!Semant.classTable.tree.isSubType(node.getType_decl(), exprType)) {
+        if (!Semant.classTable.tree.isSubType(exprType, node.getType_decl())) {
             Utilities.semantError(Semant.filename,node)
                     .println(
                             "Inferred type "+node.getType_decl()+" of initialization of attribute "+node.getInit().getType()+" does not conform to declared type "+node.getType_decl()+"."
@@ -97,6 +85,14 @@ public class TypeCheckingVisitor extends BaseVisitor<Object, Object> {
         // check expr type == symboltable type
 
         visit(node.getExpr(),data);
+
+        if (node.getName() == TreeConstants.self) {
+            Utilities.semantError(Semant.filename, node)
+                    .println("Cannot assign to 'self'.");
+            node.setType(TreeConstants.Object_); // error reocvery
+            return ret;
+        }
+
         Symbol nodeType = symtable2.lookup(node.getName()).first;
         if (!Semant.classTable.tree.isSubType(node.getExpr().getType(),nodeType)) {
             Utilities.semantError(Semant.filename,node)
@@ -170,7 +166,7 @@ public class TypeCheckingVisitor extends BaseVisitor<Object, Object> {
         // add var to symtable2
 
         // get expr type
-        Object init = visit(node.getInit(),data);
+        visit(node.getInit(),data);
         symtable2.enterScope();
         symtable2.addId(
                 node.getIdentifier(),
@@ -184,8 +180,8 @@ public class TypeCheckingVisitor extends BaseVisitor<Object, Object> {
         );
         Object body = visit(node.getBody(), data);
         symtable2.exitScope();
-        // checks init is the same type as declr
-        if (!Semant.classTable.tree.isSubType(node.getInit().getType(), node.getType_decl())) {
+        // checks init is the same type as declr, if init is not preset, which is valid, ignore
+        if (!Semant.classTable.tree.isSubType(node.getInit().getType(), node.getType_decl()) && !(node.getInit() instanceof NoExpressionNode)) {
             Utilities.semantError(Semant.filename, node)
                     .println(
                             "Inferred type "+node.getInit().getType().getName()+" of initialization of "+node.getIdentifier().getName()+" does not conform to identifier's declared type "+node.getType_decl().getName()+"."
@@ -405,6 +401,37 @@ public class TypeCheckingVisitor extends BaseVisitor<Object, Object> {
     }
 
 
+
+    // gets the details for a method that is not in the symboltable but is valid (i.e class method or fref methods)
+    public Tuple<Symbol, Kind, MethodSignature, Symbol> dispatchAddMethodHelper(Symbol className, Symbol methodName) {
+        ClassNode methodsClass = Semant.classTable.tree.findClass(Semant.classTable.tree.root, className);
+        MethodNode method = Semant.classTable.getMethod(methodsClass,methodName); // gets method from other class
+        List<Symbol> formalsType = method // list of signature type
+                .getFormals()
+                .stream()
+                .map(f -> f.getType_decl())
+                .toList();
+
+        List<Symbol> formalsName = method // list of signature variable names
+                .getFormals()
+                .stream()
+                .map(f -> f.getName())
+                .toList();
+
+
+        // populate symtableData but do not add
+        return new Tuple<>(
+                method.getReturn_type(),
+                Kind.METHOD,
+                new MethodSignature(
+                        formalsType,
+                        formalsName,
+                        currentClass.getName()
+                ),
+                currentClass.getName()
+        );
+
+    }
     @Override
     public Object visit(DispatchNode node, Object data) {
         // method call
@@ -413,20 +440,34 @@ public class TypeCheckingVisitor extends BaseVisitor<Object, Object> {
         // else set it as object
         node.setType(TreeConstants.Object_); // will get overwritten if no semantic errors occur
 
+
         Tuple<Symbol, Kind, MethodSignature, Symbol> symtableData = symtable2.lookup(node.getName());
 
-        if (symtableData == null && Semant.classTable.searchFeatures(currentClass, node.getName())) {
-            // default method
-//            TODO fix this, by adding default methods to the symtable on program visit
-            return ret;
-        }
+        visit(node.getExpr(), data);
+
+//        // method is defined in another class (class method)
+//        if (node.getExpr().getType() != TreeConstants.SELF_TYPE) {// class method
+//            // check if it exists on said class
+//            boolean existsOnClass = Semant.classTable.featureExistOnClass(node.getExpr().getType(), node.getName()) == null;
+//            if (!existsOnClass) {
+//                System.out.println("HEY");
+//                Utilities.semantError(Semant.filename, node)
+//                        .println("Dispatch to undefined method " + node.getName().getName() + ".");
+//                return ret;
+//            }
+//            symtableData = dispatchAddMethodHelper(node.getExpr().getType(), node.getName());
+//        }
 
         if (symtableData == null) {
-            Utilities.semantError(Semant.filename, node)
-                    .println("Dispatch to undefined method "+node.getName().getName()+".");
-            return ret;
-        }
+            // fref method
+            if (node.getExpr().getType() == TreeConstants.SELF_TYPE) {
+                symtableData = dispatchAddMethodHelper(currentClass.getName(), node.getName());
+            } else {
+                // method of another class TODO ADD
+//                symtableData = dispatchAddMethodHelper(node.g)
+            }
 
+        }
 
 
         List<Symbol> argTypes = symtableData.third.formalTypes;
@@ -447,7 +488,12 @@ public class TypeCheckingVisitor extends BaseVisitor<Object, Object> {
         }
 
         for(int i = 0; i < argTypes.size(); i++) {
-            if (!argTypes.get(i).equals(actualsTypes.get(i))) {
+//            if (!argTypes.get(i).equals(actualsTypes.get(i))) {\
+            if (!Semant.classTable.tree.isSubType(actualsTypes.get(i),argTypes.get(i))) {
+                System.out.println(Semant.classTable.tree.isSubType(
+                        argTypes.get(i),
+                        actualsTypes.get(i)
+                ));
                 Utilities.semantError(Semant.filename,node)
                         .println("In call of method "+node.getName().getName()+", type "+actualsTypes.get(i).getName()+" of parameter "+actualNames.get(i)+" does not conform to declared type "+argTypes.get(i).getName()+".");
             }
@@ -458,8 +504,56 @@ public class TypeCheckingVisitor extends BaseVisitor<Object, Object> {
         return ret;
     }
 
-    //    ---------------------- END ----------------------    //
+    @Override
+    public Object visit(CaseNode node, Object data) {
+        // visit all exprs
+        visit(node.getExpr(),data);
+        for(BranchNode b : node.getCases()) {
+            visit(b,data);
+        }
+        Symbol returnType = Semant.classTable.tree.lub(
+                node.getCases().stream()
+                        .map(x -> x.getExpr().getType())
+                        .toList()
+        );
+        node.setType(returnType);
+        return ret;
+    }
 
+    @Override
+    public Object visit(BranchNode node, Object data) {
+        Symbol id = node.getName();
+        symtable2.enterScope();
+        // adding branch var to scope
+        symtable2.addId(id,
+                new Tuple<>(
+                        node.getType_decl(),
+                        Kind.VAR,
+                        null,
+                        currentClass.getName()
+                )
+        );
+        visit(node.getExpr(),data);
+        symtable2.exitScope();
+        return ret;
+    }
+
+    @Override
+    public Object visit(CondNode node, Object data) {
+        visit(node.getCond(),data);
+        visit(node.getThenExpr(), data);
+        visit(node.getElseExpr(),data);
+        // condition is not of type bool
+        if (node.getCond().getType() != TreeConstants.Bool) {
+            Utilities.semantError(Semant.filename,node)
+                    .println("Predicate of 'if' does not have type Bool.");
+            return ret;
+        }
+
+        Symbol returnType = Semant.classTable.tree.lub(node.getElseExpr().getType(), node.getThenExpr().getType());
+        node.setType(returnType);
+        return ret;
+    }
 
     @Override
     public Object visit(MethodNode node, Object data) {
@@ -522,7 +616,7 @@ public class TypeCheckingVisitor extends BaseVisitor<Object, Object> {
         }
 
         // type check method body
-        if (!Semant.classTable.tree.isSubType(node.getExpr().getType(),node.getReturn_type())) {
+        if (!Semant.classTable.tree.isSubType(node.getExpr().getType(),node.getReturn_type())&& !Utilities.errors()) { // error may have occured here so if there is we ignore for error recovery
             Utilities.semantError(Semant.filename,node)
                     .println(
                             "Inferred return type "+node.getExpr().getType().getName()+" of method "+node.getName().getName()+" does not conform to declared return type "+node.getReturn_type().getName()+"."
