@@ -188,6 +188,7 @@ final class MethodSignature{
 enum Kind {
     VAR,
     METHOD,
+    CLASS,
 
 }
 

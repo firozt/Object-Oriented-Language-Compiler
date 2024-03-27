@@ -8,6 +8,7 @@ public class ScopeCheckingVisitor extends BaseVisitor<Object, Object> {
     public static SymbolTable symtable = Semant.symtable; // local ref for less code
     public static ClassNode currentClass = null;
 
+
     public ScopeCheckingVisitor() {
     }
 
@@ -19,6 +20,7 @@ public class ScopeCheckingVisitor extends BaseVisitor<Object, Object> {
         return super.visit(node, data);
     }
 
+
     @Override
     public Object visit(ClassNode node, Object data) { // class
         // it is invalid to redefine a default class,
@@ -27,7 +29,9 @@ public class ScopeCheckingVisitor extends BaseVisitor<Object, Object> {
                 TreeConstants.Str,
                 TreeConstants.Bool,
                 TreeConstants.IO,
-                TreeConstants.Object_
+                TreeConstants.Object_,
+                TreeConstants.SELF_TYPE
+
         );
         if (DefaultClassNames.contains(node.getName())) {
             Utilities.semantError(Semant.filename,node)
@@ -36,6 +40,20 @@ public class ScopeCheckingVisitor extends BaseVisitor<Object, Object> {
 
 
         currentClass = node;
+
+        if (symtable.lookup(currentClass.getName()) != null) {
+            Utilities.semantError(Semant.filename,node)
+                    .println("Class "+node.getName().getName()+" was previously defined");
+        }
+
+        symtable.addId(currentClass.getName(),
+                new Tuple<>(
+                        null,
+                        Kind.CLASS,
+                        null,
+                        currentClass.getName()
+                ));
+
         symtable.enterScope();
         int numPops = Semant.loadInheritedClassScopes(node, symtable); // loads inherited class features
 
@@ -49,7 +67,7 @@ public class ScopeCheckingVisitor extends BaseVisitor<Object, Object> {
     @Override
     public Object visit(LetNode node, Object data) { // let
         symtable.enterScope();
-        symtable.addId(node.getIdentifier(), new Tuple<>(node.getType(),Kind.VAR, null, currentClass.getName()));
+        symtable.addId(node.getIdentifier(), new Tuple<>(node.getBody().getType(),Kind.VAR, null, currentClass.getName()));
         Object ret = super.visit(node, data);
         symtable.exitScope();
         return ret;
@@ -87,9 +105,14 @@ public class ScopeCheckingVisitor extends BaseVisitor<Object, Object> {
 
         // we need to check if the dispatch is defined in this scope
         visit(node.getExpr(), data);
+        // check if dispatch is acting on another class
+
 
             // not in scope table and not a valid forward reference
-        if (symtable.lookup(node.getName())==null && !Semant.classTable.isValidForwardReference(currentClass, node.getName())) {
+        if (
+                symtable.lookup(node.getName())==null &&
+                !Semant.classTable.isValidForwardReference(currentClass, node.getName()))
+        {
             Utilities.semantError(Semant.filename, node)
                     .println("Dispatch to undefined method "+node.getName().getName()+".");
             return ret;
@@ -108,10 +131,9 @@ public class ScopeCheckingVisitor extends BaseVisitor<Object, Object> {
     public Object visit(BranchNode node, Object data) {
         Symbol id = node.getName();
         symtable.enterScope();
-        symtable.addId(id,new Tuple<>(null,Kind.VAR,null,currentClass));
+        symtable.addId(id,new Tuple<>(node.getExpr().getType(),Kind.VAR,null,currentClass));
         visit(node.getExpr(),data);
         symtable.exitScope();
-
         return ret;
     }
     // -------------- Adds ID to SymbolTable -------------- //
@@ -119,14 +141,19 @@ public class ScopeCheckingVisitor extends BaseVisitor<Object, Object> {
 
     @Override
     public Object visit(AttributeNode node, Object data) { // Attribute
-        symtable.addId(node.getName(), new Tuple<>(null, Kind.VAR, null, currentClass.getName()));
+        symtable.addId(node.getName(), new Tuple<>(node.getType_decl(), Kind.VAR, null, currentClass.getName()));
         return super.visit(node, data);
     }
 
 
     @Override
     public Object visit(AssignNode node, Object data) { // Assign
-        symtable.addId(node.getName(),node.getType());
+        symtable.addId(node.getName(), new Tuple<>(
+                node.getExpr().getType(),
+                Kind.VAR,
+                null,
+                currentClass.getName()
+        ));
         return super.visit(node, data);
     }
 
@@ -134,6 +161,7 @@ public class ScopeCheckingVisitor extends BaseVisitor<Object, Object> {
     public Object visit(ObjectNode node, Object data) { // Object
         boolean inScope = symtable.lookup(node.getName() ) != null;
         if (node.getName() == TreeConstants.self) { // self is allowed in any context
+            node.setType(TreeConstants.self);
             return super.visit(node, data);
         }
         // not in scope and not forward referenced
@@ -166,7 +194,7 @@ public class ScopeCheckingVisitor extends BaseVisitor<Object, Object> {
                 .addId(
                         node.getName(),
                         new Tuple<>(
-                                node.getReturn_type(),
+                                node.getExpr().getType(),
                                 Kind.METHOD,
                                 new MethodSignature(
                                         formalsType,
@@ -183,7 +211,8 @@ public class ScopeCheckingVisitor extends BaseVisitor<Object, Object> {
         for (Symbol arg : formalsName) {
             symtable.addId(
                     arg,
-                    null // we dont need to keep track of any types
+                    new Tuple<>(node.getExpr().getType(),Kind.VAR,null,currentClass.getName())
+//                    null
             );
         }
 

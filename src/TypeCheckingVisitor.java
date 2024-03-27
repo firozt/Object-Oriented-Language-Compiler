@@ -460,26 +460,15 @@ public class TypeCheckingVisitor extends BaseVisitor<Object, Object> {
 
         visit(node.getExpr(), data);
 
-//        // method is defined in another class (class method)
-//        if (node.getExpr().getType() != TreeConstants.SELF_TYPE) {// class method
-//            // check if it exists on said class
-//            boolean existsOnClass = Semant.classTable.featureExistOnClass(node.getExpr().getType(), node.getName()) == null;
-//            if (!existsOnClass) {
-//                System.out.println("HEY");
-//                Utilities.semantError(Semant.filename, node)
-//                        .println("Dispatch to undefined method " + node.getName().getName() + ".");
-//                return ret;
-//            }
-//            symtableData = dispatchAddMethodHelper(node.getExpr().getType(), node.getName());
-//        }
 
         if (symtableData == null) {
             // fref method
             if (node.getExpr().getType() == TreeConstants.SELF_TYPE) {
                 symtableData = dispatchAddMethodHelper(currentClass.getName(), node.getName());
             } else {
-                // method of another class TODO ADD
-//                symtableData = dispatchAddMethodHelper(node.g)
+                // method of another class
+                System.out.println("IN");
+                symtableData = dispatchAddMethodHelper(node.getExpr().getType(), node.getName());
             }
 
         }
@@ -522,8 +511,15 @@ public class TypeCheckingVisitor extends BaseVisitor<Object, Object> {
     public Object visit(CaseNode node, Object data) {
         // visit all exprs
         visit(node.getExpr(),data);
+        Set<Symbol> seenTypes = new HashSet<>();
+        // visit all branches, if branch has dupe type, report error
         for(BranchNode b : node.getCases()) {
+            if (seenTypes.contains(b.getType_decl())) {
+                Utilities.semantError(Semant.filename,node)
+                        .println("Duplicate branch "+b.getType_decl()+" in case statement");
+            }
             visit(b,data);
+            seenTypes.add(b.getType_decl());
         }
         Symbol returnType = Semant.classTable.tree.lub(
                 node.getCases().stream()
@@ -574,6 +570,7 @@ public class TypeCheckingVisitor extends BaseVisitor<Object, Object> {
         // method
         // we have to check that the return type of the expr is a valid type of the methods return
         // we also need to add method signature to symbol table
+        // errors can happen when defining method params, check for those
 
         // add type to symboltabe, along with formal types
         List<Symbol> formalsType = node // list of signature type
@@ -587,6 +584,25 @@ public class TypeCheckingVisitor extends BaseVisitor<Object, Object> {
                 .stream()
                 .map(f -> f.getName())
                 .toList();
+
+        // check if method already exists in this scope, if so check if valid
+        // redefine
+
+        if(symtable2.lookup(node.getName())!=null) {
+            // check if params match up
+            // if so then is valid and continue
+            // else report error and early return
+            Tuple<Symbol,Kind,MethodSignature,Symbol> symtableData = symtable2.lookup(node.getName());
+            List<Symbol> m2FormalNames = symtableData.third.formalNames;
+            List<Symbol> m2FormalTypes = symtableData.third.formalTypes;
+            if((m2FormalNames.size() != formalsName.size()) || !(m2FormalTypes.equals(formalsType)) ) {
+                // invalid redefine
+                Utilities.semantError(Semant.filename,node)
+                        .println("Incompatible number of formal parameters in redefined method "+node.getName().getName()+".");
+                return ret;
+            }
+        }
+
         symtable2
                 .addId(
                         node.getName(),
@@ -602,7 +618,6 @@ public class TypeCheckingVisitor extends BaseVisitor<Object, Object> {
                         )
                 );
 
-
         if (hasDupeFormals(formalsName,node)) {
             return ret;
         }
@@ -613,6 +628,14 @@ public class TypeCheckingVisitor extends BaseVisitor<Object, Object> {
         // add formals to scope
 
         for (int i = 0; i < formalsType.size(); i++) {
+            if (formalsType.get(i) == TreeConstants.SELF_TYPE) {
+                Utilities.semantError(Semant.filename,node)
+                        .println("Formal parameter "+formalsName.get(i).getName()+" cannot have type SELF_TYPE.");
+            }
+            if (formalsName.get(i) == TreeConstants.self) {
+                Utilities.semantError(Semant.filename, node)
+                        .println("'self' cannot be the name of a formal parameter.");
+            }
             symtable2.addId(
                     formalsName.get(i),
                     new Tuple<>(
@@ -627,12 +650,6 @@ public class TypeCheckingVisitor extends BaseVisitor<Object, Object> {
         visit(node.getExpr(),data);
         // exit scope
         symtable2.exitScope();
-
-        // i didnt implement the visit for an expression node
-        if (node.getExpr().getType() == null) {
-            System.out.println("Did not handle expr case of " +node.getExpr().toString()+ ". (might wanna check that out)");
-
-        }
 
         // type check method body
         if (!Semant.classTable.tree.isSubType(node.getExpr().getType(),node.getReturn_type())&& !Utilities.errors()) { // error may have occured here so if there is we ignore for error recovery

@@ -1,4 +1,8 @@
-class Main{main():Int{0};};
-class B {
-   foo() : Int {"Hellos"};
+class Main {
+ main(): Object {{ 
+                  "test".length();
+                  "test".substr(0,1);
+                  "test".concat(" me");
+                }};
 };
+

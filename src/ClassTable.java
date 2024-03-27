@@ -250,26 +250,6 @@ class ClassTable {
     public boolean searchFeatures(ClassNode classNode, Symbol Identifier) {
         Stack<InheritanceTreeNode> path = new Stack<>();
         tree.getClassVisiblity(tree.root,classNode,path);
-        // stack has the path from object -> class, visibility of all features
-//        while (!path.isEmpty()) {
-//            InheritanceTreeNode cur = path.pop();
-//            for(FeatureNode f : cur.getFeatures()) {
-//                if (f instanceof MethodNode m) {
-//                    if (m.getName().equals(Identifier)) {
-//                        return true;
-//                    }
-//                } else if(f instanceof AttributeNode a) {
-//                    if (a.getName().equals(Identifier)) {
-//                        return true;
-//                    }
-//
-//
-//                } else {
-//                    System.err.println("Feature is neither method nor Attribute");
-//                    System.exit(-1);
-//                }
-//            }
-//        }
 
         for(InheritanceTreeNode node : path) {
 
