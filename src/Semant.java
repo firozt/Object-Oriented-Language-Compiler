@@ -33,11 +33,13 @@ class Semant {
     public static ClassTable classTable;
     // return type, type of ID, method signature (formals + retrun) , class declaration
     public static SymbolTable<Tuple<Symbol, Kind, MethodSignature, Symbol>> symtable = new SymbolTable();
-    public static Symbol filename = getFileName();
+    public static Symbol filename;
 
     public static void analyze(ProgramNode program) {
         ArrayList<ClassNode> cls =(ArrayList<ClassNode>) (new ArrayList<>(program.getClasses()).clone());
+        if (!cls.isEmpty()) filename = cls.get(0).getFilename();
         classTable = new ClassTable(cls);
+
 
         if (Utilities.errors()) Utilities.fatalError(Utilities.ErrorCode.ERROR_SEMANT);
 
@@ -52,21 +54,6 @@ class Semant {
         program.accept(typecheckVisitor, null);
 
         if (Utilities.errors()) Utilities.fatalError(Utilities.ErrorCode.ERROR_SEMANT);
-    }
-
-//    gets filename
-    public static Symbol getFileName() {
-        ArrayList<Symbol> syms = new ArrayList<>(StringTable.stringtable.values());
-        for (Symbol sym : syms) {
-            String s = sym.getName();
-            int len = s.length();
-            if (len > 3 && (s.substring(len-3,len).equals(".cl"))) {
-                return sym;
-            } if (len > 5 &&  s.substring(len-5,len).equals(".test")) {
-                return sym;
-            }
-        }
-        return null;
     }
 
     public static void checkForMain(List<ClassNode> cls, InheritanceTree tree, ProgramNode root) {
