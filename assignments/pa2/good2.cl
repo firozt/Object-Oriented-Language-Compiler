@@ -1,4 +1,9 @@
-class Main {
-   main() : Int {1};
-   foo(x : Int, x : Bool, x : String) : Object { new Object };
+class Main { main() : Int {0 }; };
+
+class A {
+	inky(a:Int, b:String, c:A, d:Bool):Int { a };
+};
+
+class B inherits A {
+	inky(a:Int, b:String, c:A, d:Bool):Int { a + 1 };
 };

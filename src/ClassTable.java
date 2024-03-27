@@ -383,7 +383,6 @@ class InheritanceTree {
 
 //        inherits from a bad class (str, int, bool)
         if (parent.equals(TreeConstants.Bool) || parent.equals(TreeConstants.Int) || parent.equals(TreeConstants.Str)) {
-//            TODO: May be invalid?
             Utilities.semantError(node).println("Class "+ node.getName().getName() + " cannot inherit class " + parent.getName());
             return true;
         }
@@ -470,7 +469,6 @@ class InheritanceTree {
     // checks if type1 is a subtype of type2 by finding the parent in the inheritance
     // graph and checking if the child node is in the parents subtree
     public boolean isSubType(Symbol type1, Symbol type2) {
-//        System.out.println("CHECKING IF : " + type1.getName() + " IS A SUBTYPE OF " + type2.getName());
 
         // defining some edge cases, and obvious cases to save computation
         if (type1 == null) {
@@ -487,8 +485,9 @@ class InheritanceTree {
         }
 
         if (type1 == TreeConstants.SELF_TYPE || type2 == TreeConstants.SELF_TYPE) {
-            type1 = TypeCheckingVisitor.currentClass.getName();
-            return true; // TODO IMPLEMENT SELF
+//            type1 = TypeCheckingVisitor.currentClass.getName();
+//            System.out.println("wrong");
+//            return true;
         }
 
 
@@ -497,6 +496,21 @@ class InheritanceTree {
 //         now run dfs_traverser again but on the parent subtree, and search for type1 node
         return findClass(parentNode, type1) != null;
     }
+
+    public boolean isSubType(Tuple<Symbol,Kind,MethodSignature, Symbol> symdata1, Tuple<Symbol,Kind,MethodSignature, Symbol> symdata2) {
+        Symbol type1 = symdata1.first;
+        Symbol type2 = symdata1.first;
+        if (symdata1.first == TreeConstants.SELF_TYPE) {
+            type1 = symdata1.fourth;
+        }
+        if (symdata2.first == TreeConstants.SELF_TYPE) {
+            type2 = symdata2.fourth;
+        }
+
+        return isSubType(type1, type2);
+
+    }
+
 
     // uses DFS to find a node, keeping track of the path
     // of classes it traverses (in a stack)

@@ -89,11 +89,11 @@ public class ScopeCheckingVisitor extends BaseVisitor<Object, Object> {
         visit(node.getExpr(), data);
 
             // not in scope table and not a valid forward reference
-            if (symtable.lookup(node.getName())==null && !Semant.classTable.isValidForwardReference(currentClass, node.getName())) {
-                Utilities.semantError(Semant.filename, node)
-                        .println("Dispatch to undefined method "+node.getName().getName()+".");
-                return ret;
-            }
+        if (symtable.lookup(node.getName())==null && !Semant.classTable.isValidForwardReference(currentClass, node.getName())) {
+            Utilities.semantError(Semant.filename, node)
+                    .println("Dispatch to undefined method "+node.getName().getName()+".");
+            return ret;
+        }
 
         super.visit(node, data);
         return ret;

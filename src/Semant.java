@@ -54,7 +54,7 @@ class Semant {
         if (Utilities.errors()) Utilities.fatalError(Utilities.ErrorCode.ERROR_SEMANT);
     }
 
-//    TODO find out how to actually do this
+//    gets filename
     public static Symbol getFileName() {
         ArrayList<Symbol> syms = new ArrayList<>(StringTable.stringtable.values());
         for (Symbol sym : syms) {
@@ -159,6 +159,8 @@ class Semant {
         }
         return res+1;
     }
+
+
 
 }
 // -------------- Helper Classes -------------- //
