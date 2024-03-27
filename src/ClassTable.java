@@ -484,10 +484,14 @@ class InheritanceTree {
             return true;
         }
 
-        if (type1 == TreeConstants.SELF_TYPE || type2 == TreeConstants.SELF_TYPE) {
-//            type1 = TypeCheckingVisitor.currentClass.getName();
-//            System.out.println("wrong");
-//            return true;
+
+        // object SELF_TYPE can safely be replaced in which the variable was defined in i.e currentclass
+        // this is probably a crude way to do it, but ive already wasted so much time. this is good enough
+        if (type1 == TreeConstants.SELF_TYPE) {
+            type1 = TypeCheckingVisitor.currentClass.getName();
+        }
+        if (type2 == TreeConstants.SELF_TYPE) {
+            type2 = TypeCheckingVisitor.currentClass.getName();
         }
 
 

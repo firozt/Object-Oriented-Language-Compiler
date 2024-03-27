@@ -72,8 +72,6 @@ public class TypeCheckingVisitor extends BaseVisitor<Object, Object> {
         }
 
         // check if self_type, if so change it before checking sub type compatability
-        exprType = exprType == TreeConstants.SELF_TYPE ? currentClass.getName() : exprType;
-        declaredType = declaredType == TreeConstants.SELF_TYPE ? currentClass.getName() : declaredType;
 
         if (!Semant.classTable.tree.isSubType(exprType, declaredType)) {
             Utilities.semantError(Semant.filename,node)
@@ -101,8 +99,6 @@ public class TypeCheckingVisitor extends BaseVisitor<Object, Object> {
         Symbol nodeType = symtable2.lookup(node.getName()).first;
         Symbol exprType = node.getExpr().getType();
 
-        exprType = exprType == TreeConstants.SELF_TYPE ? currentClass.getName() : exprType;
-        nodeType = nodeType == TreeConstants.SELF_TYPE ? currentClass.getName() : nodeType;
 
         if (!Semant.classTable.tree.isSubType(exprType,nodeType)) {
             Utilities.semantError(Semant.filename,node)
@@ -199,8 +195,6 @@ public class TypeCheckingVisitor extends BaseVisitor<Object, Object> {
         Symbol initType = node.getInit().getType();
         Symbol declaredType = node.getType_decl();
 
-        initType = initType == TreeConstants.SELF_TYPE ? currentClass.getName() : initType;
-        declaredType = declaredType == TreeConstants.SELF_TYPE ? currentClass.getName() : initType;
 
         // checks init is the same type as declr, if init is not preset, which is valid, ignore
         if (!Semant.classTable.tree.isSubType(initType, declaredType) && !(node.getInit() instanceof NoExpressionNode)) {
@@ -640,11 +634,8 @@ public class TypeCheckingVisitor extends BaseVisitor<Object, Object> {
 
         }
 
-        Symbol returnType = node.getReturn_type() == TreeConstants.SELF_TYPE ? currentClass.getName() : node.getReturn_type();
-        Symbol exprType = node.getExpr().getType() == TreeConstants.SELF_TYPE ? currentClass.getName() : node.getExpr().getType();
         // type check method body
-        if (!Semant.classTable.tree.isSubType(exprType,returnType)&& !Utilities.errors()) { // error may have occured here so if there is we ignore for error recovery
-            System.out.println("IN ERROR");
+        if (!Semant.classTable.tree.isSubType(node.getExpr().getType(),node.getReturn_type())&& !Utilities.errors()) { // error may have occured here so if there is we ignore for error recovery
             Utilities.semantError(Semant.filename,node)
                     .println(
                             "Inferred return type "+node.getExpr().getType().getName()+" of method "+node.getName().getName()+" does not conform to declared return type "+node.getReturn_type().getName()+"."
