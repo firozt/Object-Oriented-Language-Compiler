@@ -187,8 +187,7 @@ public class TypeCheckingVisitor extends BaseVisitor<Object, Object> {
                             "Inferred type "+node.getInit().getType().getName()+" of initialization of "+node.getIdentifier().getName()+" does not conform to identifier's declared type "+node.getType_decl().getName()+"."
                     );
         }
-        // TODO: may be wrong
-        node.setType(node.getType_decl());
+        node.setType(node.getBody().getType());
         return ret;
     }
 
@@ -588,6 +587,11 @@ public class TypeCheckingVisitor extends BaseVisitor<Object, Object> {
                         )
                 );
 
+
+        if (hasDupeFormals(formalsName,node)) {
+            return ret;
+        }
+
         // enter new scope to visit method
         symtable2.enterScope();
 
@@ -625,6 +629,20 @@ public class TypeCheckingVisitor extends BaseVisitor<Object, Object> {
 
         return ret;
 //        return super.visit(node, data);
+    }
+
+    private boolean hasDupeFormals(List<Symbol> formalnames, MethodNode node) {
+        boolean res = false;
+        Set<Symbol> seen = new HashSet<>();
+        for (Symbol s : formalnames) {
+            if (seen.contains(s)) {
+                res = true;
+                Utilities.semantError(Semant.filename,node)
+                        .println("Formal parameter "+s.getName()+" is multiply defined.");
+            }
+            seen.add(s);
+        }
+        return res;
     }
 
     @Override

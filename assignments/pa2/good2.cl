@@ -1,8 +1,4 @@
 class Main {
- main(): Object {{ 
-                  "test".length();
-                  "test".substr(0,1);
-                  "test".concat(" me");
-                }};
+   main() : Int {1};
+   foo(x : Int, x : Bool, x : String) : Object { new Object };
 };
-
