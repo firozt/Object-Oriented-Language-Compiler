@@ -5,7 +5,7 @@ import java.util.List;
 import java.util.Set;
 
 public class ScopeCheckingVisitor extends BaseVisitor<Object, Object> {
-    public static SymbolTable symtable = Semant.symtable; // local ref for less code
+    public static SymbolTable symtable = Semant.symtablePass1; // local ref for less code
     public static ClassNode currentClass = null;
 
 
@@ -47,7 +47,7 @@ public class ScopeCheckingVisitor extends BaseVisitor<Object, Object> {
         }
 
         symtable.addId(currentClass.getName(),
-                new Tuple<>(
+                new RowData<>(
                         null,
                         Kind.CLASS,
                         null,
@@ -67,7 +67,7 @@ public class ScopeCheckingVisitor extends BaseVisitor<Object, Object> {
     @Override
     public Object visit(LetNode node, Object data) { // let
         symtable.enterScope();
-        symtable.addId(node.getIdentifier(), new Tuple<>(node.getBody().getType(),Kind.VAR, null, currentClass.getName()));
+        symtable.addId(node.getIdentifier(), new RowData<>(node.getBody().getType(),Kind.VAR, null, currentClass.getName()));
         Object ret = super.visit(node, data);
         symtable.exitScope();
         return ret;
@@ -81,8 +81,8 @@ public class ScopeCheckingVisitor extends BaseVisitor<Object, Object> {
         // accessing scope of another class
         // we need to check if method is defined in said class
         if (node.getExpr().getType() != TreeConstants.self) {
-            ClassNode methodClass = Semant.classTable.tree.findClass(Semant.classTable.tree.root, node.getExpr().getType());
-            boolean existsOnClass = Semant.classTable.featureExistOnClass(node.getExpr().getType(), node.getName()) == null;
+            ClassNode methodClass = Semant.tree.findClass(Semant.tree.root, node.getExpr().getType());
+            boolean existsOnClass = Semant.featureExistOnClass(node.getExpr().getType(), node.getName()) == null;
             if (!existsOnClass) {
                 Utilities.semantError(Semant.filename, node)
                         .println("Dispatch to undefined method "+node.getName().getName()+".");
@@ -100,18 +100,23 @@ public class ScopeCheckingVisitor extends BaseVisitor<Object, Object> {
         return ret;
     }
 
+
     @Override
     public Object visit(DispatchNode node, Object data) { // dispatch
 
         // we need to check if the dispatch is defined in this scope
         visit(node.getExpr(), data);
         // check if dispatch is acting on another class
-
+        if (node.getExpr().getType() != TreeConstants.SELF_TYPE) {
+            // we cant say anything about if this method is in scope as
+            // it belongs from another class, do the checking in typechecker
+            return ret;
+        }
 
             // not in scope table and not a valid forward reference
         if (
                 symtable.lookup(node.getName())==null &&
-                !Semant.classTable.isValidForwardReference(currentClass, node.getName()))
+                !Semant.isValidForwardReference(currentClass, node.getName()))
         {
             Utilities.semantError(Semant.filename, node)
                     .println("Dispatch to undefined method "+node.getName().getName()+".");
@@ -131,7 +136,7 @@ public class ScopeCheckingVisitor extends BaseVisitor<Object, Object> {
     public Object visit(BranchNode node, Object data) {
         Symbol id = node.getName();
         symtable.enterScope();
-        symtable.addId(id,new Tuple<>(node.getExpr().getType(),Kind.VAR,null,currentClass));
+        symtable.addId(id,new RowData<>(node.getExpr().getType(),Kind.VAR,null,currentClass));
         visit(node.getExpr(),data);
         symtable.exitScope();
         return ret;
@@ -141,14 +146,14 @@ public class ScopeCheckingVisitor extends BaseVisitor<Object, Object> {
 
     @Override
     public Object visit(AttributeNode node, Object data) { // Attribute
-        symtable.addId(node.getName(), new Tuple<>(node.getType_decl(), Kind.VAR, null, currentClass.getName()));
+        symtable.addId(node.getName(), new RowData<>(node.getType_decl(), Kind.VAR, null, currentClass.getName()));
         return super.visit(node, data);
     }
 
 
     @Override
     public Object visit(AssignNode node, Object data) { // Assign
-        symtable.addId(node.getName(), new Tuple<>(
+        symtable.addId(node.getName(), new RowData<>(
                 node.getExpr().getType(),
                 Kind.VAR,
                 null,
@@ -165,7 +170,7 @@ public class ScopeCheckingVisitor extends BaseVisitor<Object, Object> {
             return super.visit(node, data);
         }
         // not in scope and not forward referenced
-        if (!inScope && !Semant.classTable.searchFeatures(currentClass, node.getName())) {
+        if (!inScope && !Semant.searchFeatures(currentClass, node.getName())) {
             Utilities.semantError(Semant.filename, node)
                 .println("Undeclared identifier "+ node.getName() +".");
         }
@@ -193,13 +198,12 @@ public class ScopeCheckingVisitor extends BaseVisitor<Object, Object> {
         symtable
                 .addId(
                         node.getName(),
-                        new Tuple<>(
+                        new RowData<>(
                                 node.getExpr().getType(),
                                 Kind.METHOD,
                                 new MethodSignature(
                                         formalsType,
-                                        formalsName,
-                                        currentClass.getName()
+                                        formalsName
                                 ),
                                 currentClass.getName()
                         )
@@ -211,7 +215,7 @@ public class ScopeCheckingVisitor extends BaseVisitor<Object, Object> {
         for (Symbol arg : formalsName) {
             symtable.addId(
                     arg,
-                    new Tuple<>(node.getExpr().getType(),Kind.VAR,null,currentClass.getName())
+                    new RowData<>(node.getExpr().getType(),Kind.VAR,null,currentClass.getName())
 //                    null
             );
         }
