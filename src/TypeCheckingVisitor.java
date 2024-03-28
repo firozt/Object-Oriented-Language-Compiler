@@ -219,7 +219,8 @@ public class TypeCheckingVisitor extends BaseVisitor<Object, Object> {
         // return true if var is void else false
         // we only need to put the return type, nothing else
         node.setType(TreeConstants.Bool);
-        return super.visit(node, data);
+        visit(node.getE1(),data);
+        return ret;
     }
 
     @Override
@@ -370,28 +371,29 @@ public class TypeCheckingVisitor extends BaseVisitor<Object, Object> {
     @Override
     public Object visit(SubNode node, Object data) {
         BINOPHelper(node, data);
-        return super.visit(node, data);
+        return ret;
     }
 
     @Override
     public Object visit(MulNode node, Object data) {
         BINOPHelper(node, data);
 
-        return super.visit(node, data);
+        return ret;
+
     }
 
     @Override
     public Object visit(PlusNode node, Object data) {
         BINOPHelper(node, data);
+        return ret;
 
-        return super.visit(node, data);
     }
 
     @Override
     public Object visit(DivideNode node, Object data) {
         BINOPHelper(node, data);
+        return ret;
 
-        return super.visit(node, data);
     }
 
     //    --------------------- MISC ----------------------   //

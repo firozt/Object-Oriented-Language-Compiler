@@ -1,21 +1,4 @@
-class Main {
- b:B <- new B;
- main(): Object { b@A.foo(5,b,b,b) }; 
-};
-
 class A {
-    foo(a:Int, b: B, c:A, d:B) : Int {
-       5
-    };
-  
+   foo() : B { new B };
 };
-
-class B inherits A {
-
-    foo(a:Int, b: B, c:A, d:B) : Int {
-       6
-    };  
-};
-
-
-
+class Main { main () : Int { 6 }; };
