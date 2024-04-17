@@ -207,6 +207,16 @@ public class CgenEmit  {
         }
     }
 
+    protected void codeDispatchTables(CgenEnv env) {
+        s.print(env.getClassname() + CgenConstants.DISPTAB_SUFFIX + CgenConstants.LABEL); // prints class label
+        int num_methods = env.getNumMethods();
+
+        for (int i = 0; i <num_methods; i++) {
+            Cgen.MethodInfo m = env.methodOffsets.lookup(i);
+            s.println(CgenConstants.WORD + m.classname + CgenConstants.METHOD_SEP + m.methodname);
+        }
+    }
+
     protected void codePrototypeObject(CgenEnv env) {
 
         // Put the -1 header for the garbage collector

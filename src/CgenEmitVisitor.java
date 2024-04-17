@@ -1,5 +1,6 @@
 import ast.*;
 
+import java.util.HashSet;
 import java.util.List;
 
 public class CgenEmitVisitor extends CgenVisitor<String, String>{
@@ -59,7 +60,7 @@ public class CgenEmitVisitor extends CgenVisitor<String, String>{
 
     @Override
     public String visit(StaticDispatchNode node, String target) {
-        /* TODO */
+        System.out.println("NOT IMPLEMENTED STATIC DISPATCH");
         return CgenConstants.ACC;
     }
 
@@ -172,85 +173,205 @@ public class CgenEmitVisitor extends CgenVisitor<String, String>{
 
     @Override
     public String visit(NewNode node, String target) {
-        /* TODO */
+        // load addr to classes protObj to a0
+        // call object.copy
+        // call class_init
+        String ref = node.getType_name().getName() + CgenConstants.PROTOBJ_SUFFIX;
+        Cgen.emitter.emitLoadAddress(CgenConstants.ACC, ref);
+        Cgen.emitter.emitCopy();
+        Cgen.emitter.emitInit(node.getType_name());
+
         return CgenConstants.ACC;
     }
 
     @Override
     public String visit(CondNode node, String target) {
-        /* TODO */
+        String cond = node.getCond().accept(this, target); // visit condition load it into a0
+        // a0 will be true or false object
+        // load value of bool which is offset 3
+        Cgen.emitter.emitLoad(CgenConstants.T1,3,CgenConstants.ACC);
+
+        int elseLabel = CgenEnv.getFreshLabel();
+        int endIfLabel = CgenEnv.getFreshLabel();
+
+
+
+        Cgen.emitter.emitBeqz(CgenConstants.T1,elseLabel);
+//        do if here
+        node.getThenExpr().accept(this,cond);
+        Cgen.emitter.emitBranch(endIfLabel);
+        Cgen.emitter.emitLabelDef(elseLabel);
+//        do else here
+        node.getElseExpr().accept(this,cond);
+        Cgen.emitter.emitLabelDef(endIfLabel);
+
         return CgenConstants.ACC;
     }
 
     @Override
+    // TODO: MAYBE NOT CORRECT?
     public String visit(LoopNode node, String target) {
-        int loop_label = CgenEnv.getFreshLabel();
-        /* TODO */
+        int loopStart = CgenEnv.getFreshLabel();
+        int loopEnd = CgenEnv.getFreshLabel();
+
+        Cgen.emitter.emitLabelDef(loopStart);
+        // do loop check
+        node.getCond().accept(this,target);
+        // load value of a0 into t1
+        Cgen.emitter.emitLoad(CgenConstants.T1,3,CgenConstants.ACC);
+        Cgen.emitter.emitBeqz(CgenConstants.T1,loopEnd);
+
+        // do loop
+        node.getBody().accept(this, target);
+
+        Cgen.emitter.emitBranch(loopStart);
+        Cgen.emitter.emitLabelDef(loopEnd);
+
         return CgenConstants.ACC;
     }
 
     @Override
     public String visit(BlockNode node, String target) {
-        /* TODO */
-        return null;
+        for (ExpressionNode n : node.getExprs().subList(0,node.getExprs().size()-1))
+            visit(n,target);
+        // block returns last value of the block
+        return visit(node.getExprs().get(node.getExprs().size()-1),target);
     }
 
+    // puts e1 top of stack, and puts e2 into acc.
+    // uses t1, t0 to compute addition
+    // pops e1 off the stack
+    // res of operation value is in $t1 (value not addr)
+    public String evalE1AndE2(BinopNode node, String data) {
+        String e1 = node.getE1().accept(this, data); // loads addr to $a0
+        Cgen.emitter.emitPush(CgenConstants.ACC); // push addr of e1 to stack
+        String e2 = node.getE2().accept(this, data); // loads addr to $a0
+
+        Cgen.emitter.emitCopy(); // copies object to place new val into
+
+        Cgen.emitter.emitLoad(CgenConstants.T1,3,CgenConstants.ACC); // load value of $a0 to $t1
+        // pop stack
+        Cgen.emitter.emitLoad(CgenConstants.T2,1,CgenConstants.SP); // loads addr from top of stack to $t2
+        Cgen.emitter.emitAddiu(CgenConstants.SP,CgenConstants.SP,4); // pops stack
+        Cgen.emitter.emitLoad(CgenConstants.T2, 3, CgenConstants.T2); // gets value of top of stack
+        return e2;
+    }
     @Override
     public String visit(PlusNode node, String data) {
-        /* TODO */
-        return null;
+        String res = evalE1AndE2(node, data); // t1 and t2 is now populated
+        Cgen.emitter.emitAdd(CgenConstants.T1, CgenConstants.T1, CgenConstants.T2); // t1 now holds e1 + e2 value
+        Cgen.emitter.emitStore(CgenConstants.T1,3,CgenConstants.ACC); // update accumulator int constant value
+        return res;
     }
 
     @Override
     public String visit(SubNode node, String data) {
-        /* TODO */
-        return null;
+        String res = evalE1AndE2(node, data);
+        Cgen.emitter.emitSub(CgenConstants.T1, CgenConstants.T2, CgenConstants.T1); // t1 now holds e1 - e2 value
+        Cgen.emitter.emitStore(CgenConstants.T1,3,CgenConstants.ACC); // update accumulator int constant value
+        return res;
     }
 
     @Override
     public String visit(MulNode node, String data) {
-        /* TODO */
-        return null;
+        String res = evalE1AndE2(node, data);
+        Cgen.emitter.emitMul(CgenConstants.T1, CgenConstants.T2, CgenConstants.T1); // t1 now holds e1 * e2 value
+        Cgen.emitter.emitStore(CgenConstants.T1,3,CgenConstants.ACC); // update accumulator int constant value
+        return res;
     }
 
     @Override
     public String visit(DivideNode node, String data) {
-        /* TODO */
-        return null;
+        String res = evalE1AndE2(node, data);
+        Cgen.emitter.emitDiv(CgenConstants.T1, CgenConstants.T2, CgenConstants.T1); // t1 now holds e1 / e2 value
+        Cgen.emitter.emitStore(CgenConstants.T1,3,CgenConstants.ACC); // update accumulator int constant value
+        return res;
     }
 
+
+
+
+    public String comparisonHelper(BoolBinopNode node, String data, boolean compareValue) {
+
+        // 1 ) load e1, e2 into t1 and t2
+        String e1 = node.getE1().accept(this, data);
+        Cgen.emitter.emitMove(CgenConstants.T2, CgenConstants.ACC);
+
+        String e2 = node.getE2().accept(this, data);
+        Cgen.emitter.emitMove(CgenConstants.T3, CgenConstants.ACC);
+
+//        type must be the same given one expr is of type string, int , bool
+
+        if (compareValue) {
+            Cgen.emitter.emitLoad(CgenConstants.T2,3,CgenConstants.T2);
+            Cgen.emitter.emitLoad(CgenConstants.T3,3,CgenConstants.T3);
+        }
+
+        return CgenConstants.ACC;
+    }
     //The calling convention for equality_test:
     //  INPUT: The two objects are passed in $t1 and $t2
     //  OUTPUT: Initial value of $a0, if the objects are equal
     //          Initial value of $a1, otherwise
     @Override
     public String visit(EqNode node, String target) {
-        /* TODO */
-        return CgenConstants.ACC;
+        String res = comparisonHelper(node,target, false);
+        // generate label
+        int lab = CgenEnv.getFreshLabel();
+//        Cgen.emitter.emitEqualityTest();
+        Cgen.emitter.emitLoadBool(CgenConstants.ACC,Boolean.TRUE); // maybe not safe
+        Cgen.emitter.emitBeq(CgenConstants.T3,CgenConstants.T2,lab); // do check
+        Cgen.emitter.emitLoadBool(CgenConstants.ACC,Boolean.FALSE);
+        Cgen.emitter.emitLabelDef(lab);
+        return res;
     }
 
     @Override
     public String visit(LEqNode node, String data) {
-        /* TODO */
-        return null;
+        String res = comparisonHelper(node,data, true);
+        // generate label
+        int lab = CgenEnv.getFreshLabel();
+        Cgen.emitter.emitLoadBool(CgenConstants.ACC,Boolean.TRUE); // maybe not safe
+        Cgen.emitter.emitBleq(CgenConstants.T3,CgenConstants.T2,lab); // do check
+        Cgen.emitter.emitLoadBool(CgenConstants.ACC,Boolean.FALSE);
+        Cgen.emitter.emitLabelDef(lab);
+        return res;
     }
 
     @Override
     public String visit(LTNode node, String data) {
-        /* TODO */
-        return null;
+        String res = comparisonHelper(node,data, true);
+        // generate label
+        int lab = CgenEnv.getFreshLabel();
+        Cgen.emitter.emitLoadBool(CgenConstants.ACC,Boolean.TRUE); // maybe not safe
+        Cgen.emitter.emitBlt(CgenConstants.T3,CgenConstants.T2,lab); // do check
+        Cgen.emitter.emitLoadBool(CgenConstants.ACC,Boolean.FALSE);
+        Cgen.emitter.emitLabelDef(lab);
+
+        return res;
     }
 
     @Override
     public String visit(NegNode node, String target) {
-        /* TODO */
-        return null;
+        String res = node.getE1().accept(this, target);
+
+        Cgen.emitter.emitLoad(CgenConstants.T1,3,CgenConstants.ACC); // get int value from obj
+        Cgen.emitter.emitNeg(CgenConstants.T1,CgenConstants.T1); // do negation
+        Cgen.emitter.emitStore(CgenConstants.T1,3,CgenConstants.ACC); // store vlaue into value of a0
+        return res;
     }
 
     @Override
     public String visit(CompNode node, String target) {
-        /* TODO */
-        return null;
+        int lab = CgenEnv.getFreshLabel();
+
+        String r = node.getE1().accept(this, target); // load param into $a0
+        Cgen.emitter.emitLoad(CgenConstants.T1,3,CgenConstants.ACC); // gets value
+        Cgen.emitter.emitLoadBool(CgenConstants.ACC, Boolean.TRUE);
+        Cgen.emitter.emitBeqz(CgenConstants.T1, lab);
+        Cgen.emitter.emitLoadBool(CgenConstants.ACC, Boolean.FALSE);
+        Cgen.emitter.emitLabelDef(lab);
+        return r;
     }
 
     @Override
@@ -261,20 +382,32 @@ public class CgenEmitVisitor extends CgenVisitor<String, String>{
 
     @Override
     public String visit(BoolConstNode node, String target) {
-        /* TODO */
-        return null;
+        Cgen.emitter.emitLoadBool(target,node.getVal());
+        return target;
     }
 
     @Override
     public String visit(StringConstNode node, String target) {
-        /* TODO */
-        return null;
+        Cgen.emitter.emitLoadString(target,node.getVal());
+        return target;
     }
 
     @Override
     public String visit(IsVoidNode node, String target) {
-        /* TODO */
-        return null;
+        /*
+        evaluates to true if expr is void and evaluates to false if expr is not void.
+        */
+
+        int lab = CgenEnv.getFreshLabel();
+        String r = node.getE1().accept(this,target);
+        Cgen.emitter.emitMove(CgenConstants.T1,CgenConstants.ACC);
+        Cgen.emitter.emitLoadBool(CgenConstants.ACC,Boolean.TRUE);
+        Cgen.emitter.emitBeqz(CgenConstants.T1, lab);
+        Cgen.emitter.emitLoadBool(CgenConstants.ACC,Boolean.FALSE);
+        Cgen.emitter.emitLabelDef(lab);
+
+
+        return r;
     }
 
     @Override
@@ -319,6 +452,7 @@ public class CgenEmitVisitor extends CgenVisitor<String, String>{
             dest = CgenConstants.ACC;
         }
         String r_e1 = e1.accept(this,dest); //r_e1 <- e1, where hopefully r_e1=dest
+        System.out.println(r_e1);
         env.addLocal(temp_var);
         env.vars.lookup(temp_var).emitUpdate(r_e1);
     }

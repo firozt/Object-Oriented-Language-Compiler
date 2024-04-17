@@ -113,13 +113,20 @@ public class Cgen  {
 
         @Override
         public String emitRef(String optionalDest) {
-            /* TODO */
-            return null;
+            // attributes are stored offset 3+ for any given class
+//            offset = 3;
+//            System.out.println(offset);
+
+            final int ATTRIBUTE_OFFSET = 3; // offset to start finding attributes
+            Cgen.emitter.emitLoad(optionalDest,ATTRIBUTE_OFFSET+offset,CgenConstants.SELF);
+            return optionalDest;
         }
 
         @Override
         public void emitUpdate(String source) {
-            /* TODO */
+            final int ATTRIBUTE_OFFSET = 3; // offset to start finding attributes
+
+            Cgen.emitter.emitStore(source,ATTRIBUTE_OFFSET+offset,CgenConstants.SELF);
         }
     }
 
@@ -131,7 +138,7 @@ public class Cgen  {
         }
 
         @Override
-        public String emitRef(String optionalDest) {
+        public String  emitRef(String optionalDest) {
             String reg = CgenConstants.getRegister(offset);
             if (reg != null)
             {
