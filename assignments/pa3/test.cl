@@ -1,11 +1,20 @@
-class Main {
-	main():Object {{
-		-- if (true = false) then abort() else 0 fi;
-		-- if (true = true) then 0 else abort() fi;
-		if ("hello" = "hello".copy()) then 0 else abort() fi;
-    -- "hello".copy();
-		-- let a:String in if (a = "") then 0 else abort() fi;
-		-- if 5 = 6 then abort() else 0 fi;
-	}};
+class A {
+	x:SELF_TYPE;
+	init():Object { x <- new SELF_TYPE };
+	foo():Int { 1 };
+	getx():A { x };
+};
 
+class B inherits A {
+	foo():Int { 2 };
+};
+
+class Main inherits IO {
+	main():Object {{
+		let a:A <- new B in {
+			a.init();
+			out_int(a.getx().foo());
+		};
+		out_string("\n");
+	}};
 };

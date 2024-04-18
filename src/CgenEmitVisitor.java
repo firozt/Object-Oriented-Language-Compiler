@@ -35,6 +35,7 @@ public class CgenEmitVisitor extends CgenVisitor<String, String>{
 
     @Override
     public String visit(DispatchNode node, String target) {
+        System.out.println("IN " + node.getName() + ": " + node.getExpr().getType());
         Symbol classname = node.getExpr().getType();
         if (classname == TreeConstants.SELF_TYPE)
             classname = env.getClassname();
@@ -60,7 +61,44 @@ public class CgenEmitVisitor extends CgenVisitor<String, String>{
 
     @Override
     public String visit(StaticDispatchNode node, String target) {
-        System.out.println("NOT IMPLEMENTED STATIC DISPATCH");
+        // 1) add all the args to the stack
+        for (ExpressionNode arg : node.getActuals()) {
+            arg.accept(this, target); // evaluate arg, loaded into a0
+            Cgen.emitter.emitPush(CgenConstants.ACC); // push onto stack
+        }
+
+        // 2) evaluate object calling method
+        node.getExpr().accept(this, target); // loads into a0
+
+        // 3) check for void
+        int lab = CgenEnv.getFreshLabel();
+        CgenNode c = Cgen.classTable.get(node.getExpr().getType()); // class of calling expr
+        Cgen.MethodInfo minfo = c.env.methods.lookup(node.getName());
+
+
+        Cgen.emitter.emitBne(CgenConstants.ACC,CgenConstants.ZERO,lab);      // test for void
+        Cgen.emitter.emitLoadString(CgenConstants.ACC, env.getFilename());
+        Cgen.emitter.emitLoadImm(CgenConstants.T1, node.getLineNumber());
+        Cgen.emitter.emitDispatchAbort();
+        Cgen.emitter.emitLabelDef(lab);
+
+        // 4) load correct disp table to a0, either current disp table or a parent type
+
+        String classname = node.getType_name().getName();
+        // check for self_type
+
+
+
+        if (!classname.equals(node.getExpr().getType().getName()) && !classname.equals(TreeConstants.SELF_TYPE.getName())) {
+            // casting type to parent, change the dispatch table addr
+            Cgen.emitter.emitLoadAddress(CgenConstants.T1,classname+CgenConstants.DISPTAB_SUFFIX);
+        } else {
+            // same type , disp table already loaded in a0
+            Cgen.emitter.emitLoad(CgenConstants.T1, CgenConstants.DISPTABLE_OFFSET, CgenConstants.ACC);
+        }
+        Cgen.emitter.emitLoad(CgenConstants.T1, minfo.getOffset(), CgenConstants.T1);
+        Cgen.emitter.emitJalr(CgenConstants.T1);
+
         return CgenConstants.ACC;
     }
 
@@ -176,10 +214,17 @@ public class CgenEmitVisitor extends CgenVisitor<String, String>{
         // load addr to classes protObj to a0
         // call object.copy
         // call class_init
-        String ref = node.getType_name().getName() + CgenConstants.PROTOBJ_SUFFIX;
+        // edge case for new SELF_TYPE, in this case we
+
+        Symbol type_name = node.getType_name();
+        if (node.getType_name() == TreeConstants.SELF_TYPE) {
+            type_name = env.getClassname();
+        }
+
+        String ref = type_name + CgenConstants.PROTOBJ_SUFFIX;
         Cgen.emitter.emitLoadAddress(CgenConstants.ACC, ref);
         Cgen.emitter.emitCopy();
-        Cgen.emitter.emitInit(node.getType_name());
+        Cgen.emitter.emitInit(type_name);
 
         return CgenConstants.ACC;
     }
@@ -295,16 +340,17 @@ public class CgenEmitVisitor extends CgenVisitor<String, String>{
 
         // 1 ) load e1, e2 into t1 and t2
         String e1 = node.getE1().accept(this, data);
-        Cgen.emitter.emitMove(CgenConstants.T2, CgenConstants.ACC);
+        Cgen.emitter.emitMove(CgenConstants.T1, CgenConstants.ACC);
+        Cgen.emitter.emitMove(CgenConstants.T3,CgenConstants.T1); // case of dispatch, t1 may be overriden, save copy to t3 which is safe
 
         String e2 = node.getE2().accept(this, data);
-        Cgen.emitter.emitMove(CgenConstants.T3, CgenConstants.ACC);
+        Cgen.emitter.emitMove(CgenConstants.T2, CgenConstants.ACC);
+        Cgen.emitter.emitMove(CgenConstants.T1,CgenConstants.T3);
 
 //        type must be the same given one expr is of type string, int , bool
-
         if (compareValue) {
-            Cgen.emitter.emitLoad(CgenConstants.T2,3,CgenConstants.T2);
-            Cgen.emitter.emitLoad(CgenConstants.T3,3,CgenConstants.T3);
+            Cgen.emitter.emitLoad(CgenConstants.T2,3,CgenConstants.T2); // load back t3 incase of changes to t1
+            Cgen.emitter.emitLoad(CgenConstants.T1,3,CgenConstants.T1);
         }
 
         return CgenConstants.ACC;
@@ -318,10 +364,11 @@ public class CgenEmitVisitor extends CgenVisitor<String, String>{
         String res = comparisonHelper(node,target, false);
         // generate label
         int lab = CgenEnv.getFreshLabel();
-//        Cgen.emitter.emitEqualityTest();
         Cgen.emitter.emitLoadBool(CgenConstants.ACC,Boolean.TRUE); // maybe not safe
-        Cgen.emitter.emitBeq(CgenConstants.T3,CgenConstants.T2,lab); // do check
-        Cgen.emitter.emitLoadBool(CgenConstants.ACC,Boolean.FALSE);
+
+        Cgen.emitter.emitBeq(CgenConstants.T1,CgenConstants.T2,lab); // do check
+        Cgen.emitter.emitLoadBool(CgenConstants.A1,Boolean.FALSE);
+        Cgen.emitter.emitEqualityTest();
         Cgen.emitter.emitLabelDef(lab);
         return res;
     }
@@ -332,7 +379,7 @@ public class CgenEmitVisitor extends CgenVisitor<String, String>{
         // generate label
         int lab = CgenEnv.getFreshLabel();
         Cgen.emitter.emitLoadBool(CgenConstants.ACC,Boolean.TRUE); // maybe not safe
-        Cgen.emitter.emitBleq(CgenConstants.T3,CgenConstants.T2,lab); // do check
+        Cgen.emitter.emitBleq(CgenConstants.T1,CgenConstants.T2,lab); // do check
         Cgen.emitter.emitLoadBool(CgenConstants.ACC,Boolean.FALSE);
         Cgen.emitter.emitLabelDef(lab);
         return res;
@@ -344,7 +391,7 @@ public class CgenEmitVisitor extends CgenVisitor<String, String>{
         // generate label
         int lab = CgenEnv.getFreshLabel();
         Cgen.emitter.emitLoadBool(CgenConstants.ACC,Boolean.TRUE); // maybe not safe
-        Cgen.emitter.emitBlt(CgenConstants.T3,CgenConstants.T2,lab); // do check
+        Cgen.emitter.emitBlt(CgenConstants.T1,CgenConstants.T2,lab); // do check
         Cgen.emitter.emitLoadBool(CgenConstants.ACC,Boolean.FALSE);
         Cgen.emitter.emitLabelDef(lab);
 
@@ -354,10 +401,10 @@ public class CgenEmitVisitor extends CgenVisitor<String, String>{
     @Override
     public String visit(NegNode node, String target) {
         String res = node.getE1().accept(this, target);
-
+        Cgen.emitter.emitCopy();
         Cgen.emitter.emitLoad(CgenConstants.T1,3,CgenConstants.ACC); // get int value from obj
         Cgen.emitter.emitNeg(CgenConstants.T1,CgenConstants.T1); // do negation
-        Cgen.emitter.emitStore(CgenConstants.T1,3,CgenConstants.ACC); // store vlaue into value of a0
+        Cgen.emitter.emitStore(CgenConstants.T1,3,CgenConstants.ACC); // store valaue into value of a0
         return res;
     }
 
