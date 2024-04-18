@@ -35,7 +35,6 @@ public class CgenEmitVisitor extends CgenVisitor<String, String>{
 
     @Override
     public String visit(DispatchNode node, String target) {
-        System.out.println("IN " + node.getName() + ": " + node.getExpr().getType());
         Symbol classname = node.getExpr().getType();
         if (classname == TreeConstants.SELF_TYPE)
             classname = env.getClassname();
@@ -219,7 +218,19 @@ public class CgenEmitVisitor extends CgenVisitor<String, String>{
         Symbol type_name = node.getType_name();
         if (node.getType_name() == TreeConstants.SELF_TYPE) {
             type_name = env.getClassname();
+
+            Cgen.emitter.emitStore("$s1",0,CgenConstants.FP);
+            Cgen.emitter.emitLoadAddress(CgenConstants.T1, CgenConstants.CLASSOBJTAB);
+            Cgen.emitter.emitLoad(CgenConstants.T2,0,CgenConstants.SELF);
+            Cgen.emitter.emitSll(CgenConstants.T2,CgenConstants.T2,3);
+            Cgen.emitter.emitAddu(CgenConstants.T1, CgenConstants.T1, CgenConstants.T2);
+            Cgen.emitter.emitMove("$s1",CgenConstants.T1);
+            Cgen.emitter.emitLoad(CgenConstants.ACC,0,CgenConstants.T1);
+            Cgen.emitter.emitCopy();
+            Cgen.emitter.emitLoad(CgenConstants.T1,4,"$s1");
+            return CgenConstants.ACC;
         }
+
 
         String ref = type_name + CgenConstants.PROTOBJ_SUFFIX;
         Cgen.emitter.emitLoadAddress(CgenConstants.ACC, ref);
@@ -499,7 +510,6 @@ public class CgenEmitVisitor extends CgenVisitor<String, String>{
             dest = CgenConstants.ACC;
         }
         String r_e1 = e1.accept(this,dest); //r_e1 <- e1, where hopefully r_e1=dest
-        System.out.println(r_e1);
         env.addLocal(temp_var);
         env.vars.lookup(temp_var).emitUpdate(r_e1);
     }
